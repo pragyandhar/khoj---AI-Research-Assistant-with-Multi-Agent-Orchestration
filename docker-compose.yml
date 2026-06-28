@@ -1,0 +1,70 @@
+version: '3.8'
+
+# Services will talk to each other over this network
+networks:
+  app-network:
+    driver: bridge
+
+# This defines the storage - agar hamare container ko kuch ho jata hai to hamara data yaha pr safe hoga
+volumes:
+  postgres_data:
+
+services: 
+  # ========== POSTGRES SERVICE (DB) ==========
+  postgres:
+    image: postgres:16-alpine        # USE: Defines the OS
+    container_name: postgres_db      # USE: Container name - baad me identify karne me aasani hogi
+    environment: 
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin123
+      POSTGRES_DB: mydb
+    ports:
+      - "5432:5432"                  # USE: Laptop Port : Container Port
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks: 
+      - app-network                  # USE: The network on which this service will communicate
+    restart: unless-stopped
+  # ========== POSTGRES SERVICE (DB) ==========
+
+  # ========== REDIS SERVICE (Cache) ==========
+  redis:
+    image: redis:7-alpine              
+    container_name: redis_cache
+    ports:
+      - "6379:6379"
+    networks:
+      - app-network
+    restart: unless-stopped
+  # ========== REDIS SERVICE (Cache) ==========
+  
+  # ========== BACKEND SERVICE (API) ==========
+  backend:
+    build: ./backend
+    container_name: backend_api
+    depends_on:                         # USE: First run postgres and redis service successfully then this service will run
+      - postgres
+      - redis
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app                  # USE: Hot reload - You continue working on local, I will update it on Docker
+    networks:
+      - app-network
+    restart: unless-stopped
+  # ========== BACKEND SERVICE (API) ==========
+  
+  # ========== FRONTEND SERVICE (UI) ==========
+  frontend:
+    build: ./frontend
+    container_name: frontend_ui
+    depends_on:                        
+      - backend
+    ports:
+      - "3000:3000"
+    networks:
+      - app-network                    
+    restart: unless-stopped
+  # ========== FRONTEND SERVICE (UI) ==========
