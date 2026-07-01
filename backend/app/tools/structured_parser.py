@@ -24,7 +24,7 @@ def get_structured_llm():
     llm = ChatOpenAI(
         model="gpt-4o",                         # USE: OpenAI LLM model identifier version
         api_key=settings.OPENAI_API_KEY,        # USE: Authenticate with OpenAI api key
-        temperature=0.3,                        # USE: Set lower temperature for structural correctness
+        temperature=0.2,                        # USE: Set lower temperature for structural correctness
     )                                           # USE: ChatOpenAI model initializer
     
     return llm.with_structured_output(StructuredReport)  # USE: Returns structured model interface
@@ -43,12 +43,12 @@ async def parse_to_structured_report(raw_content: str, query: str) -> Structured
         "and detailed thematic sections (minimum 1 section). For each section, write content of at least 50 characters and attach relevant citations with relevance scores (0.0 to 1.0) "
         "based strictly on the raw data. Assign a confidence score (0.0 to 1.0) reflecting the completeness and accuracy of the raw data.\n"
         "Maintain strict factual integrity and do not hallucinate or invent any information."
-    )                                           # USE: Detailed parsing instructions for the LLM
+    )     
     
     messages = [
         ("system", system_msg),
         ("human", f"Original Query: {query}\n\nRaw Research Content:\n{raw_content}")
-    ]                                           # USE: Messages list prompt for OpenAI
+    ]
     
     # FLOW-2: Get structured model instance and execute request
     try:
