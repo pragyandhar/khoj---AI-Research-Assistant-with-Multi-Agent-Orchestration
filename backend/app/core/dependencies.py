@@ -8,7 +8,7 @@ import redis.asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
-from app.db.session import async_session_factory
+from app.db.base import async_session_factory
 # ================== IMPORTS ==================
 
 

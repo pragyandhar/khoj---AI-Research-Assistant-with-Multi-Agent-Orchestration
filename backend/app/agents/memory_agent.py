@@ -1,7 +1,7 @@
 # WHAT DOES THIS FILE DO: Defines the MemoryMixin to track windowed request conversation history for LLM agents.
 
 # ================== IMPORTS ==================
-from langchain.memory import ConversationBufferWindowMemory
+from langchain_classic.memory import ConversationBufferWindowMemory
 # ================== IMPORTS ==================
 
 

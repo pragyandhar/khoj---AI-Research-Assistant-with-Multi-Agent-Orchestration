@@ -73,7 +73,7 @@ class ResearchService:
                 error=None,
                 messages=[],
                 human_approved=False,
-                checkpoint_id=None,
+                graph_checkpoint_id=None,
                 created_at=datetime.utcnow().isoformat()
             )                                   # USE: Instantiate graph input state payload
             

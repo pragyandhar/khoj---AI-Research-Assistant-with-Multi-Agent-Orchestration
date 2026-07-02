@@ -14,4 +14,5 @@ api_router = APIRouter()                    # USE: Primary router mapping all v1
 # FLOW-1: Include the research and health routers into the main router
 api_router.include_router(research_router)  # USE: Mount research router (already prefix-bound)
 api_router.include_router(health_router, prefix="/health")  # USE: Mount health router with /health prefix
+api_router.include_router(health_router)    # USE: Mount health router directly without prefix to support /health and /ready routes
 # =========== VARIABLES : Root Router for v1 API ===========

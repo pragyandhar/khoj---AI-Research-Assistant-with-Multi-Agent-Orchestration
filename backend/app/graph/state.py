@@ -22,6 +22,6 @@ class GraphState(TypedDict):
     error: Optional[str]
     messages: Annotated[list, operator.add]
     human_approved: bool
-    checkpoint_id: Optional[str]
+    graph_checkpoint_id: Optional[str]
     created_at: str
 # =========== CLASS ===========
