@@ -4,11 +4,12 @@
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
 
-from app.core.dependencies import DBSession, AuthKey
+from app.core.dependencies import DBSession, AuthKey, Cache
 from app.core.exceptions import SessionNotFoundException
 from app.models.research import ResearchRequest
 from app.repositories.report_repository import ReportRepository
 from app.repositories.session_repository import SessionRepository
+from app.services.cache_service import CacheService
 from app.services.research_service import ResearchService
 # ================== IMPORTS ==================
 
@@ -21,13 +22,14 @@ router = APIRouter(prefix="/research", tags=["research"])  # USE: Router instanc
 # =========== FUNCTION ===========
 # ROLE: Starts research query execution and streams status and report data via SSE.
 @router.post("/query")
-async def start_research(request: ResearchRequest, api_key: AuthKey, db: DBSession):
+async def start_research(request: ResearchRequest, api_key: AuthKey, db: DBSession, cache: Cache):
     """ Post route to trigger full research pipeline with Server-Sent Events. """
     
     # FLOW-1: Initialize repositories and service class
     session_repo = SessionRepository(db)        # USE: Session repository instance
     report_repo = ReportRepository(db)          # USE: Report repository instance
-    research_service = ResearchService(session_repo, report_repo)  # USE: Instantiate service orchestrator
+    cache_service = CacheService(cache)         # USE: Cache service client wrapper instance
+    research_service = ResearchService(session_repo, report_repo, cache_service)  # USE: Instantiate service orchestrator
     
     
     # =========== FUNCTION ===========

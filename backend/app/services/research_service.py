@@ -12,6 +12,7 @@ from app.db.tables.sessions import Session
 from app.models.research import ResearchRequest, StreamEvent
 from app.repositories.report_repository import ReportRepository
 from app.repositories.session_repository import SessionRepository
+from app.services.cache_service import CacheService
 # ================== IMPORTS ==================
 
 
@@ -23,12 +24,13 @@ class ResearchService:
 
     # =========== FUNCTION ===========
     # ROLE: Initialize ResearchService and instantiate target agents.
-    def __init__(self, session_repository: SessionRepository, report_repository: ReportRepository):
+    def __init__(self, session_repository: SessionRepository, report_repository: ReportRepository, cache_service: CacheService = None):
         """ Setup agents and repositories for orchestrating research flow. """
         
-        # FLOW-1: Assign repository dependencies
+        # FLOW-1: Assign repository dependencies and cache service
         self.session_repo = session_repository  # USE: Session data table access repository
         self.report_repo = report_repository    # USE: Report data table access repository
+        self.cache_service = cache_service      # USE: Optional Cache service layer instance
         
         # FLOW-2: Instantiate sub-agents
         self.router_agent = RouterAgent()       # USE: Agent to classify user query topic
@@ -42,7 +44,16 @@ class ResearchService:
     async def process(self, request: ResearchRequest) -> AsyncGenerator[StreamEvent, None]:
         """ Run the full research pipeline and yield status update events. """
         
-        # FLOW-1: Create research session and initialize transaction ID
+        # FLOW-1: Check cache service first and return cached report if hit
+        if self.cache_service:
+            cached_report = await self.cache_service.get(request.query)  # USE: Attempt cache retrieve
+            
+            if cached_report:
+                yield StreamEvent(event_type="report", data=cached_report.model_dump())  # USE: Stream cache report response
+                
+                return
+                
+        # FLOW-2: Create research session and initialize transaction ID
         session_id = str(uuid.uuid4())          # USE: Generate new UUID string key
         
         try:
@@ -52,21 +63,21 @@ class ResearchService:
             )                                   # USE: Create DB session record instance
             await self.session_repo.create(db_session)  # USE: Persist session row in database
             
-            # FLOW-2: Yield routing start event and run classification
+            # FLOW-3: Yield routing start event and run classification
             yield StreamEvent(event_type="status", data={"status": "routing", "session_id": session_id})  # USE: Stream status update
             topic = await self.router_agent.run(request.query)  # USE: Determine topic category
             
-            # FLOW-3: Update DB status to researching and run web search
+            # FLOW-4: Update DB status to researching and run web search
             await self.session_repo.update_status(session_id, "researching")  # USE: Save progress to database
             yield StreamEvent(event_type="status", data={"status": "researching", "topic": topic})  # USE: Stream search starting event
             research_output = await self.research_agent.run(request.query, topic)  # USE: Run react agent search
             
-            # FLOW-4: Update DB status to summarizing and build report schema
+            # FLOW-5: Update DB status to summarizing and build report schema
             await self.session_repo.update_status(session_id, "summarizing")  # USE: Save progress to database
             yield StreamEvent(event_type="status", data={"status": "summarizing"})  # USE: Stream summarizing start event
             report_data = await self.summary_agent.run(research_output, request.query, topic)  # USE: Run summarizer
             
-            # FLOW-5: Save final report, complete session status, and yield report payload
+            # FLOW-6: Save final report, complete session status, cache findings, and yield report payload
             db_report = Report(
                 session_id=session_id,
                 query=request.query,
@@ -77,10 +88,13 @@ class ResearchService:
             await self.report_repo.create(db_report)  # USE: Persist final report to database
             await self.session_repo.update_status(session_id, "completed")  # USE: Mark session completed in DB
             
+            if self.cache_service:
+                await self.cache_service.set(request.query, report_data)  # USE: Save new report to Redis Cache
+                
             yield StreamEvent(event_type="report", data=report_data.model_dump())  # USE: Stream final output report
             
         except Exception as e:
-            # FLOW-6: Handle any errors, mark session failed and yield error event
+            # FLOW-7: Handle any errors, mark session failed and yield error event
             await self.session_repo.update_status(session_id, "failed")  # USE: Update session status to failed in DB
             
             yield StreamEvent(event_type="error", data={"message": str(e)})  # USE: Stream error event details
