@@ -14,6 +14,7 @@ from app.core.logging import setup_logging, get_logger
 from app.db.base import create_all_tables
 from app.middleware.auth import AuthMiddleware
 from app.middleware.logging_middleware import CorrelationIdMiddleware
+from app.middleware.token_counter import TokenCounterMiddleware
 # ================== IMPORTS ==================
 
 
@@ -46,13 +47,16 @@ app = FastAPI(
     redoc_url="/api/redoc"
 )                                               # USE: Instantiate FastAPI app core
 
-# FLOW-1: Configure Correlation ID tracing middleware first
+# FLOW-1: Configure Latency tracking middleware first
+app.add_middleware(TokenCounterMiddleware)      # USE: Add latency wrapper first
+
+# FLOW-2: Configure Correlation ID tracing middleware second
 app.add_middleware(CorrelationIdMiddleware)     # USE: Add request tracing middleware
 
-# FLOW-2: Configure Auth middleware for securing endpoints
+# FLOW-3: Configure Auth middleware for securing endpoints
 app.add_middleware(AuthMiddleware)              # USE: Add request authentication middleware
 
-# FLOW-3: Configure CORS middleware policies
+# FLOW-4: Configure CORS middleware policies
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,        # USE: Allowed origins list from settings
@@ -61,7 +65,7 @@ app.add_middleware(
     allow_headers=["*"],                        # USE: Allow all request headers
 )
 
-# FLOW-4: Register router endpoints under /api/v1 path prefix
+# FLOW-5: Register router endpoints under /api/v1 path prefix
 app.include_router(api_router, prefix="/api/v1")  # USE: Include the main API router
 # =========== VARIABLES : FastAPI Application Setup ===========
 
