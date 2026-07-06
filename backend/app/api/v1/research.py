@@ -9,12 +9,15 @@
 # WHAT DOES THIS FILE DO: Defines FastAPI endpoints for executing research queries and retrieving session/report status.
 
 # ================== IMPORTS ==================
-from fastapi import APIRouter
+from fastapi import APIRouter, Request, HTTPException
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 
 from app.core.dependencies import DBSession, AuthKey, Cache
 from app.core.exceptions import SessionNotFoundException
-from app.models.research import ResearchRequest
+from app.db.tables.reports import Report
+from app.models.research import ResearchRequest, StreamEvent
+from app.models.report import StructuredReport
 from app.repositories.report_repository import ReportRepository
 from app.repositories.session_repository import SessionRepository
 from app.services.cache_service import CacheService
@@ -27,17 +30,30 @@ router = APIRouter(prefix="/research", tags=["research"])  # USE: Router instanc
 # =========== VARIABLES : API Router Configuration ===========
 
 
+# =========== CLASS ===========
+# ROLE: Request body schema representing rollback target checkpoint metadata.
+class RollbackRequest(BaseModel):
+    """ Target checkpoint ID for state rollbacks. """
+    checkpoint_id: str
+# =========== CLASS ===========
+
+
 # =========== FUNCTION ===========
 # ROLE: Starts research query execution and streams status and report data via SSE.
 @router.post("/query")
-async def start_research(request: ResearchRequest, api_key: AuthKey, db: DBSession, cache: Cache):
+async def start_research(request: ResearchRequest, raw_request: Request, api_key: AuthKey, db: DBSession, cache: Cache):
     """ Post route to trigger full research pipeline with Server-Sent Events. """
     
     # FLOW-1: Initialize repositories and service class
     session_repo = SessionRepository(db)        # USE: Session repository instance
     report_repo = ReportRepository(db)          # USE: Report repository instance
     cache_service = CacheService(cache)         # USE: Cache service client wrapper instance
-    research_service = ResearchService(session_repo, report_repo, cache_service)  # USE: Instantiate service orchestrator
+    research_service = ResearchService(
+        session_repo,
+        report_repo,
+        cache_service,
+        graph=raw_request.app.state.graph
+    )                                           # USE: Instantiate service orchestrator
     
     
     # =========== FUNCTION ===========
@@ -95,11 +111,120 @@ async def get_latest_report(session_id: str, db: DBSession):
 
 
 # =========== FUNCTION ===========
-# ROLE: Rollback session to previous checkpoint (Phase 3 stub).
+# ROLE: Approving human check and resuming graph workflow execution.
+@router.post("/sessions/{session_id}/approve")
+async def approve_session(session_id: str, raw_request: Request, api_key: AuthKey, db: DBSession, cache: Cache):
+    """ Approve the human check gate and resume execution streaming. """
+    
+    # FLOW-1: Set up thread configuration and resume graph state updates
+    config = {"configurable": {"thread_id": session_id}}  # USE: Config referencing the session thread
+    await raw_request.app.state.graph.aupdate_state(config, {"human_approved": True})  # USE: Update human approval flag in state
+    
+    
+    # =========== FUNCTION ===========
+    # ROLE: Nested generator executing the resumed graph workflow and formatting events to SSE.
+    async def approve_generator():
+        """ Async generator mapping resumed state updates to SSE JSON format. """
+        
+        session_repo = SessionRepository(db)    # USE: Instantiate session repository
+        report_repo = ReportRepository(db)      # USE: Instantiate report repository
+        
+        state_accumulator = {}                  # USE: Accumulate output attributes
+        
+        # FLOW-1: Resume graph run and loop through events
+        async for event in raw_request.app.state.graph.astream(None, config=config):  # USE: Resume stream with empty input payload
+            for node_name, output in event.items():  # USE: Loop over node output dicts
+                if isinstance(output, dict):
+                    state_accumulator.update(output)  # USE: Accumulate node output dictionary
+                    
+                    if node_name == "human_approval":
+                        await session_repo.update_status(session_id, "summarizing")  # USE: Update DB status to summarizing
+                        yield f"data: {StreamEvent(event_type='status', data={'status': 'summarizing'}).model_dump_json()}\n\n"
+                        
+        # FLOW-2: Retrieve and persist report results
+        final_report_dict = state_accumulator.get("final_report")
+        if final_report_dict:
+            state_info = await raw_request.app.state.graph.aget_state(config)  # USE: Retrieve graph state
+            current_state = state_info.values
+            topic = current_state.get("topic", "")
+            query = current_state.get("query", "")
+            
+            # Persist report details to DB
+            db_report = Report(
+                session_id=session_id,
+                query=query,
+                report_data=final_report_dict,
+                topic=topic,
+                confidence_score=final_report_dict.get("confidence_score"),
+            )                                   # USE: Create Report DB model
+            await report_repo.create(db_report)  # USE: Save report record in DB
+            await session_repo.update_status(session_id, "completed")  # USE: Update session status to completed
+            
+            # Cache output in Redis
+            report_obj = StructuredReport.model_validate(final_report_dict)  # USE: Parse dict to Pydantic object
+            cache_service = CacheService(cache)  # USE: Cache service client wrapper instance
+            await cache_service.set(query, report_obj)  # USE: Save report object in cache
+            
+            yield f"data: {StreamEvent(event_type='report', data=final_report_dict).model_dump_json()}\n\n"  # USE: Yield final report SSE payload
+    # =========== FUNCTION ===========
+    
+    
+    # FLOW-2: Return StreamingResponse carrying the SSE stream
+    return StreamingResponse(
+        approve_generator(),                    # USE: Stream generator callable
+        media_type="text/event-stream",         # USE: SSE content type header
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}  # USE: Disable proxy buffering headers
+    )
+# =========== FUNCTION ===========
+
+
+# =========== FUNCTION ===========
+# ROLE: Retrieves the raw graph state values and next scheduled nodes for frontend visualizer.
+@router.get("/sessions/{session_id}/state")
+async def get_session_state(session_id: str, raw_request: Request, api_key: AuthKey):
+    """ Retrieve thread state from checkpointer. """
+    
+    # FLOW-1: Retrieve state checkpoint info for thread
+    config = {"configurable": {"thread_id": session_id}}  # USE: Thread query config
+    state = await raw_request.app.state.graph.aget_state(config)  # USE: Query checkpointer
+    
+    # FLOW-2: Map current thread values
+    return {
+        "values": state.values,
+        "next": state.next,
+        "metadata": state.metadata,
+        "created_at": state.created_at,
+        "parent_config": state.parent_config
+    }
+# =========== FUNCTION ===========
+
+
+# =========== FUNCTION ===========
+# ROLE: Resets current session state values back to a target checkpoint.
 @router.post("/sessions/{session_id}/rollback")
-async def rollback_session(session_id: str):
+async def rollback_session(session_id: str, body: RollbackRequest, raw_request: Request, api_key: AuthKey):
     """ Rollback session to a prior state checkpoint. """
     
-    # FLOW-1: Return a phase 3 placeholder message
-    return {"message": "Coming in Phase 3"}
+    # FLOW-1: Retrieve target state values at previous checkpoint
+    rollback_config = {
+        "configurable": {
+            "thread_id": session_id,
+            "checkpoint_id": body.checkpoint_id
+        }
+    }                                           # USE: Config pointing to target checkpoint
+    
+    state_at_checkpoint = await raw_request.app.state.graph.aget_state(rollback_config)  # USE: Retrieve target checkpoint state
+    
+    if not state_at_checkpoint.values:
+        raise HTTPException(status_code=404, detail="Checkpoint not found")
+        
+    # FLOW-2: Update current state values and reset next node pointer to router
+    active_config = {"configurable": {"thread_id": session_id}}  # USE: Config pointing to active head
+    await raw_request.app.state.graph.aupdate_state(
+        active_config,
+        state_at_checkpoint.values,
+        as_node="router"
+    )                                           # USE: Overwrite active state values and node pointer
+    
+    return {"message": "Rollback successful", "session_id": session_id, "next_node": "router"}
 # =========== FUNCTION ===========

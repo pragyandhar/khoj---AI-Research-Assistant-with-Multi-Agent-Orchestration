@@ -31,6 +31,7 @@ class BaseAgent(ABC):
         )                                       # USE: Initialize ChatOpenAI client
         
         # FLOW-2: Setup react agent graph executor using the tools list
+        self.tools = tools                      # USE: Store tools list reference
         self.agent = create_react_agent(self.llm, tools)  # USE: Langgraph react agent initialization
     # =========== FUNCTION ===========
 

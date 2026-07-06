@@ -3,9 +3,15 @@
 # ================== IMPORTS ==================
 from unittest.mock import patch, MagicMock, AsyncMock
 import os
+import sys
+
+# Setup session-scoped mock for ChatOpenAI before any application imports occur to prevent real API connections
+patch_openai = patch("langchain_openai.ChatOpenAI")
+mock_openai_class = patch_openai.start()
 
 from fastapi import FastAPI
 import httpx
+from httpx import ASGITransport
 import pytest
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 
@@ -18,10 +24,71 @@ os.environ["DATABASE_URL"] = "postgresql+asyncpg://user:pass@localhost/db"
 os.environ["REDIS_URL"] = "redis://localhost:6379/0"
 os.environ["API_SECRET_KEY"] = "test-secret-key"
 
+# Mock setup_checkpointer and build_graph to prevent connection/execution errors during tests
+from unittest.mock import AsyncMock, MagicMock
+import sys
+
+async def mock_astream_events(*args, **kwargs):
+    yield {
+        "event": "on_chain_end",
+        "name": "router",
+        "data": {"output": {"topic": "technology", "status": "researching"}}
+    }
+    yield {
+        "event": "on_chain_end",
+        "name": "research",
+        "data": {"output": {"status": "awaiting_approval"}}
+    }
+    yield {
+        "event": "on_chain_end",
+        "name": "human_approval",
+        "data": {"output": {"status": "summarizing"}}
+    }
+    yield {
+        "event": "on_chain_end",
+        "name": "summary",
+        "data": {
+            "output": {
+                "final_report": {
+                    "title": "Test Report",
+                    "summary": "Summary",
+                    "sections": [],
+                    "topic": "technology",
+                    "confidence_score": 0.9,
+                    "total_sources": 0
+                }
+            }
+        }
+    }
+
+mock_state_info = MagicMock()
+mock_state_info.next = []
+mock_state_info.values = {
+    "query": "explain artificial intelligence in detail",
+    "topic": "technology"
+}
+
+mock_graph = MagicMock()
+mock_graph.astream_events = mock_astream_events
+mock_graph.aget_state = AsyncMock(return_value=mock_state_info)
+
+# Patch setup_checkpointer and build_graph before any imports of app
+from unittest.mock import patch
+
+patch_checkpointer = patch("app.graph.checkpointer.setup_checkpointer", new=AsyncMock(return_value=MagicMock()))
+patch_graph = patch("app.graph.main_graph.build_graph", new=MagicMock(return_value=mock_graph))
+
+patch_checkpointer.start()
+patch_graph.start()
+
 from app.core.dependencies import get_db_session
 from app.db.base import Base
 from app.main import app
 from app.models.report import StructuredReport, ReportSection
+
+# Manually register mocks on app.state to guarantee availability during tests
+app.state.checkpointer = MagicMock()
+app.state.graph = mock_graph
 # ================== IMPORTS ==================
 
 
@@ -59,8 +126,8 @@ def setup_api_key():
 async def app_client():
     """ Async context client generator for routing integration tests. """
     
-    # FLOW-1: Open httpx AsyncClient session and yield it
-    async with httpx.AsyncClient(app=app, base_url="http://test") as client:  # USE: Context manager for HTTP client
+    # FLOW-1: Open httpx AsyncClient session and yield it using ASGITransport
+    async with httpx.AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:  # USE: Context manager for HTTP client
         yield client
 # =========== FUNCTION ===========
 
@@ -71,38 +138,38 @@ async def app_client():
 def mock_openai():
     """ Setup mock object for ChatOpenAI agent and parser models. """
     
-    # FLOW-1: Patch target ChatOpenAI package module
-    with patch("langchain_openai.ChatOpenAI") as mock:  # USE: Patch ChatOpenAI model import path
-        mock_instance = mock.return_value       # USE: Retrieve target mock instance
-        
-        # FLOW-2: Mock with_structured_output behavior
-        mock_structured_llm = MagicMock()       # USE: MagicMock for structured LLM response
-        mock_instance.with_structured_output.return_value = mock_structured_llm  # USE: Bind structured mock
-        
-        # FLOW-3: Build dummy StructuredReport schema object
-        dummy_report = StructuredReport(
-            title="Test Research Report",
-            summary="This is a test summary of research findings.",
-            sections=[
-                ReportSection(
-                    heading="Introduction",
-                    content="This is the content for the introduction section of the test report.",
-                    citations=[]
-                )
-            ],
-            topic="general",
-            confidence_score=0.9,
-            total_sources=0
-        )                                       # USE: Pydantic mock report payload
-        mock_structured_llm.ainvoke = AsyncMock(return_value=dummy_report)  # USE: Bind report response to structured invoke
-        
-        # FLOW-4: Mock plain ainvoke for create_react_agent message list response
-        from langchain_core.messages import AIMessage
-        mock_instance.ainvoke = AsyncMock(
-            return_value={"messages": [AIMessage(content="Mocked research findings content.")]}
-        )                                       # USE: Bind mock message response
-        
-        yield mock
+    # FLOW-1: Reset and configure the global mocked OpenAI class instance
+    mock_openai_class.reset_mock()
+    mock_instance = mock_openai_class.return_value  # USE: Retrieve target mock instance
+    
+    # FLOW-2: Mock with_structured_output behavior
+    mock_structured_llm = MagicMock()       # USE: MagicMock for structured LLM response
+    mock_instance.with_structured_output.return_value = mock_structured_llm  # USE: Bind structured mock
+    
+    # FLOW-3: Build dummy StructuredReport schema object
+    dummy_report = StructuredReport(
+        title="Test Research Report",
+        summary="This is a test summary of research findings.",
+        sections=[
+            ReportSection(
+                heading="Introduction",
+                content="This is the content for the introduction section of the test report.",
+                citations=[]
+            )
+        ],
+        topic="general",
+        confidence_score=0.9,
+        total_sources=0
+    )                                           # USE: Pydantic mock report payload
+    mock_structured_llm.ainvoke = AsyncMock(return_value=dummy_report)  # USE: Bind report response to structured invoke
+    
+    # FLOW-4: Mock plain ainvoke for create_react_agent message list response
+    from langchain_core.messages import AIMessage
+    mock_instance.ainvoke = AsyncMock(
+        return_value={"messages": [AIMessage(content="Mocked research findings content.")]}
+    )                                           # USE: Bind mock message response
+    
+    yield mock_openai_class
 # =========== FUNCTION ===========
 
 

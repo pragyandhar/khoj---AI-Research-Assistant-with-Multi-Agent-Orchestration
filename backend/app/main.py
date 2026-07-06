@@ -12,6 +12,8 @@ from app.core.config import settings
 from app.core.exceptions import AppException
 from app.core.logging import setup_logging, get_logger
 from app.db.base import create_all_tables
+from app.graph.checkpointer import setup_checkpointer
+from app.graph.main_graph import build_graph
 from app.middleware.auth import AuthMiddleware
 from app.middleware.logging_middleware import CorrelationIdMiddleware
 from app.middleware.token_counter import TokenCounterMiddleware
@@ -32,6 +34,11 @@ async def lifespan(app: FastAPI):
     # FLOW-1: Initialize configurations, DDL generation, and log application start
     setup_logging()                             # USE: Setup structured logger processors
     await create_all_tables()                   # USE: Generate database schemas if not exist
+    
+    # FLOW-2: Initialize checkpointer and graph in application state
+    app.state.checkpointer = await setup_checkpointer()  # USE: Setup PG checkpointer
+    app.state.graph = build_graph(app.state.checkpointer)  # USE: Compile and store graph
+    
     logger.info("application_started", environment=settings.ENVIRONMENT)  # USE: Startup audit log
     
     yield

@@ -64,11 +64,12 @@ async def test_research_agent_calls_web_search(mock_openai):
     assert agent.tools[0].name == "web_search"  # USE: Verify bound tool is web_search
     
     # FLOW-2: Mock LLM client graph execution trigger
+    from langchain_core.messages import AIMessage
     mock_instance = mock_openai.return_value    # USE: Get mock OpenAI client
-    mock_instance.ainvoke = AsyncMock(return_value={"messages": []})  # USE: Mock standard client invoke
+    mock_instance.ainvoke = AsyncMock(return_value={"messages": [AIMessage(content="Mocked findings.")]})  # USE: Mock standard client invoke
     
     # FLOW-3: Mock and patch react agent graph ainvoke call and run agent
-    with patch.object(agent.agent, "ainvoke", AsyncMock(return_value={"messages": []})) as mock_ainvoke:
+    with patch.object(agent.agent, "ainvoke", AsyncMock(return_value={"messages": [AIMessage(content="Mocked findings.")]})) as mock_ainvoke:
         await agent.run("quantum computing", "technology")  # USE: Trigger research agent run
         mock_ainvoke.assert_called_once()       # USE: Verify react agent graph was invoked
 # =========== FUNCTION ===========
@@ -84,10 +85,17 @@ async def test_summary_agent_returns_structured_report(mock_openai):
     mock_instance = mock_openai.return_value    # USE: Get mock OpenAI client
     mock_structured_llm = mock_instance.with_structured_output.return_value  # USE: Get structured LLM reference
     
+    from app.models.report import ReportSection
     dummy_report = StructuredReport(
         title="Test Report",
         summary="Test summary",
-        sections=[],
+        sections=[
+            ReportSection(
+                heading="Introduction",
+                content="This is the content for the introduction section of the test report containing more than fifty characters to pass validation checks.",
+                citations=[]
+            )
+        ],
         topic="technology",
         confidence_score=0.95,
         total_sources=0

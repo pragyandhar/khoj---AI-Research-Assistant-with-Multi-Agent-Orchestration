@@ -44,11 +44,16 @@ def get_cache():
 async def get_current_api_key(authorization: str = Header()):
     """ Validates custom Authorization key header. """
     
-    # FLOW-1: Validate incoming token against stored API key
-    if authorization != settings.API_SECRET_KEY:  # USE: Check matching keys
+    # FLOW-1: Extract bearer token or raw API key from header
+    api_key = authorization
+    if authorization.startswith("Bearer "):
+        api_key = authorization[7:]             # USE: Parse out the bearer token prefix
+        
+    # FLOW-2: Validate incoming token against stored API key
+    if api_key != settings.API_SECRET_KEY:  # USE: Check matching keys
         raise HTTPException(status_code=401, detail="Invalid API Key")
         
-    return authorization
+    return api_key
 # =========== FUNCTION ===========
 
 

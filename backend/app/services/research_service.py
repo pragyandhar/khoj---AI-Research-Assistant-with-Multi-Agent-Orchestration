@@ -14,7 +14,6 @@ import uuid
 
 from app.db.tables.reports import Report
 from app.db.tables.sessions import Session
-from app.graph.main_graph import graph
 from app.graph.state import GraphState
 from app.models.research import ResearchRequest, StreamEvent
 from app.models.report import StructuredReport
@@ -31,14 +30,15 @@ class ResearchService:
 
 
     # =========== FUNCTION ===========
-    # ROLE: Initialize ResearchService with database and cache repositories.
-    def __init__(self, session_repository: SessionRepository, report_repository: ReportRepository, cache_service: CacheService = None):
+    # ROLE: Initialize ResearchService with database, cache repositories, and graph workflow.
+    def __init__(self, session_repository: SessionRepository, report_repository: ReportRepository, cache_service: CacheService = None, graph = None):
         """ Setup database repositories and cache service layer. """
         
-        # FLOW-1: Assign repository and cache service dependencies
+        # FLOW-1: Assign repository, cache service, and graph dependencies
         self.session_repo = session_repository  # USE: Session data table access repository
         self.report_repo = report_repository    # USE: Report data table access repository
         self.cache_service = cache_service      # USE: Optional Cache service layer instance
+        self.graph = graph                      # USE: Compiled LangGraph workflow instance
     # =========== FUNCTION ===========
 
 
@@ -87,13 +87,16 @@ class ResearchService:
             # FLOW-4: Run streaming graph execution events and yield status updates
             state_accumulator = {}              # USE: Dictionary to collect partial node outputs
             
-            async for event in graph.astream_events(initial_state, version="v2"):  # USE: Stream events from graph execution
+            # We configure a dynamic thread connection config for checkpointers.
+            config = {"configurable": {"thread_id": session_id}}  # USE: Run execution checkpoint session context
+            
+            async for event in self.graph.astream_events(initial_state, config=config, version="v2"):  # USE: Stream events from graph execution
                 if event.get("event") == "on_chain_end":
                     node_name = event.get("name")
                     output = event.get("data", {}).get("output")
                     
                     # If this is one of our registered nodes, accumulate output and update progress
-                    if node_name in ["router", "research", "summary", "output"] and isinstance(output, dict):
+                    if node_name in ["router", "research", "human_approval", "summary", "output"] and isinstance(output, dict):
                         state_accumulator.update(output)  # USE: Accumulate node output state attributes
                         
                         if node_name == "router":
@@ -102,10 +105,19 @@ class ResearchService:
                             yield StreamEvent(event_type="status", data={"status": "researching", "topic": topic})  # USE: Stream status event
                             
                         elif node_name == "research":
+                            await self.session_repo.update_status(session_id, "awaiting_approval")  # USE: Wait for approval
+                            yield StreamEvent(event_type="status", data={"status": "awaiting_approval"})  # USE: Stream status event
+                            
+                        elif node_name == "human_approval":
                             await self.session_repo.update_status(session_id, "summarizing")  # USE: Update session status in DB
                             yield StreamEvent(event_type="status", data={"status": "summarizing"})  # USE: Stream status event
                             
-            # FLOW-5: Extract accumulated final report and persist details to DB and cache
+            # FLOW-5: Handle post-execution checks or output yields
+            # If execution paused at human_approval checkpoint, stop processing and yield current status
+            current_state_info = await self.graph.aget_state(config)
+            if "human_approval" in current_state_info.next:
+                return
+                
             final_report_dict = state_accumulator.get("final_report")
             topic = state_accumulator.get("topic", "")
             
