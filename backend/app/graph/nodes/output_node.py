@@ -20,7 +20,31 @@ async def output_node(state: GraphState) -> dict:
     if state.get("error"):
         return {"status": "failed"}             # USE: Terminate with failed status
         
-    # FLOW-2: Log graph completion audit metadata
+    # FLOW-2: Reconstruct final_report by filtering out failed citation URLs
+    final_report = state.get("final_report")
+    verified_citations = state.get("verified_citations") or []
+    citations = state.get("citations") or []
+    
+    if final_report:
+        verified_urls = {c.get("url") for c in verified_citations if c.get("url")}  # USE: Build unique set of verified URLs
+        
+        for section in final_report.get("sections", []):
+            section_citations = section.get("citations", [])
+            # Filter section citations to only keep verified ones
+            section["citations"] = [c for c in section_citations if c.get("url") in verified_urls]  # USE: Filter citations list
+            
+        total_citations_count = len(citations)
+        original_confidence = float(final_report.get("confidence_score", 1.0))
+        
+        if total_citations_count > 0:
+            new_confidence = (len(verified_citations) / total_citations_count) * original_confidence
+        else:
+            new_confidence = original_confidence
+            
+        final_report["total_sources"] = len(verified_citations)
+        final_report["confidence_score"] = round(new_confidence, 2)
+        
+    # FLOW-3: Log graph completion audit metadata
     logger.info(
         "graph_completed",
         session_id=state["session_id"],
@@ -28,6 +52,6 @@ async def output_node(state: GraphState) -> dict:
         status="completed"
     )                                           # USE: Log execution metrics
     
-    # FLOW-3: Return final completed status
-    return {"status": "completed"}
+    # FLOW-4: Return final completed status and updated final report
+    return {"status": "completed", "final_report": final_report}
 # =========== FUNCTION ===========

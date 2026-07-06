@@ -1,8 +1,3 @@
-# UPDATE THE CODE
-# Task-1: summary_node mein report generate hone ke baad citations extract karo: citations = [c.model_dump() for section in report.sections for c in section.citations]
-# Task-2: Return dict mein citations field add karo: {"final_report": report.model_dump(), "citations": citations, "status": "citing"}
-# Task-3: GraphState mein citations: list[dict] field add karo agar nahi hai
-
 # WHAT DOES THIS FILE DO: Defines the summary node function for synthesizing research findings into structured reports inside the LangGraph workflow.
 
 # ================== IMPORTS ==================
@@ -33,13 +28,16 @@ async def summary_node(state: GraphState) -> dict:
             topic=state["topic"]
         )                                       # USE: Trigger report parser agent
         
-        # FLOW-3: Log completed status and return partial state update
+        # FLOW-3: Extract all citations for subgraph validation check
+        citations = [c.model_dump() for section in report.sections for c in section.citations]  # USE: Extract citations lists from report sections
+        
+        # FLOW-4: Log completed status and return partial state update
         logger.info("summary_node_completed", query=state["query"], topic=state["topic"])  # USE: Node audit logging
         
-        return {"final_report": report.model_dump(), "status": "completed"}
+        return {"final_report": report.model_dump(), "citations": citations, "status": "citing"}
         
     except Exception as e:
-        # FLOW-4: Handle exceptions and return failure status with detailed error description
+        # FLOW-5: Handle exceptions and return failure status with detailed error description
         logger.error("summary_node_failed", query=state["query"], error=str(e))  # USE: Failure log entry
         
         return {"status": "failed", "error": f"Summary failed: {str(e)}"}

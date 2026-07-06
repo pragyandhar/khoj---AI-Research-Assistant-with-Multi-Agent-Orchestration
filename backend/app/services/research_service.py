@@ -108,7 +108,7 @@ class ResearchService:
                     output = event.get("data", {}).get("output")
                     
                     # If this is one of our registered nodes, accumulate output and update progress
-                    if node_name in ["router", "research", "human_approval", "summary", "output"] and isinstance(output, dict):
+                    if node_name in ["router", "research", "human_approval", "summary", "citation_check", "output"] and isinstance(output, dict):
                         state_accumulator.update(output)  # USE: Accumulate node output state attributes
                         
                         if node_name == "router":
@@ -123,6 +123,10 @@ class ResearchService:
                         elif node_name == "human_approval":
                             await self.session_repo.update_status(session_id, "summarizing")  # USE: Update session status in DB
                             yield StreamEvent(event_type="status", data={"status": "summarizing"})  # USE: Stream status event
+                            
+                        elif node_name == "summary":
+                            await self.session_repo.update_status(session_id, "citing")  # USE: Update session status in DB
+                            yield StreamEvent(event_type="status", data={"status": "citing"})  # USE: Stream status event
                             
             # FLOW-5: Handle post-execution checks or output yields
             # If execution paused at human_approval checkpoint, stop processing and yield current status

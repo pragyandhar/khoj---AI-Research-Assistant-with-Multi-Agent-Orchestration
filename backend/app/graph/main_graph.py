@@ -9,6 +9,7 @@ from app.graph.nodes.research_node import research_node
 from app.graph.nodes.human_approval_node import human_approval_node
 from app.graph.nodes.summary_node import summary_node
 from app.graph.nodes.output_node import output_node
+from app.graph.citation_subgraph import build_citation_subgraph
 # ================== IMPORTS ==================
 
 
@@ -20,11 +21,12 @@ def build_graph(checkpointer=None):
     # FLOW-1: Instantiate StateGraph with our custom GraphState TypedDict
     workflow = StateGraph(GraphState)           # USE: Define LangGraph state machine schema
     
-    # FLOW-2: Register execution nodes including human approval step
+    # FLOW-2: Register execution nodes including human approval step and citation subgraph
     workflow.add_node("router", router_node)    # USE: Register routing stage
     workflow.add_node("research", research_node)  # USE: Register search stage
     workflow.add_node("human_approval", human_approval_node)  # USE: Register human approval gate stage
     workflow.add_node("summary", summary_node)  # USE: Register summary parser stage
+    workflow.add_node("citation_check", build_citation_subgraph())  # USE: Register citation subgraph check stage
     workflow.add_node("output", output_node)    # USE: Register final output stage
     
     # FLOW-3: Configure linear routing path edges
@@ -32,7 +34,8 @@ def build_graph(checkpointer=None):
     workflow.add_edge("router", "research")     # USE: Step 1 edge
     workflow.add_edge("research", "human_approval")  # USE: Route to human approval gate
     workflow.add_edge("human_approval", "summary")  # USE: Route to summary stage
-    workflow.add_edge("summary", "output")      # USE: Route to output stage
+    workflow.add_edge("summary", "citation_check")  # USE: Route to citation check subgraph
+    workflow.add_edge("citation_check", "output")  # USE: Route to output stage
     workflow.set_finish_point("output")         # USE: Terminate graph at output stage
     
     # FLOW-4: Compile graph with checkpointer and interrupt configs

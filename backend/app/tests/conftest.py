@@ -52,13 +52,24 @@ async def mock_astream_events(*args, **kwargs):
                 "final_report": {
                     "title": "Test Report",
                     "summary": "Summary",
-                    "sections": [],
+                    "sections": [
+                        {
+                            "heading": "Introduction",
+                            "content": "This is the content for the introduction section of the test report containing more than fifty characters to pass validation checks.",
+                            "citations": []
+                        }
+                    ],
                     "topic": "technology",
                     "confidence_score": 0.9,
                     "total_sources": 0
                 }
             }
         }
+    }
+    yield {
+        "event": "on_chain_end",
+        "name": "citation_check",
+        "data": {"output": {"verified_citations": [], "failed_citations": []}}
     }
 
 mock_state_info = MagicMock()

@@ -24,4 +24,7 @@ class GraphState(TypedDict):
     human_approved: bool
     graph_checkpoint_id: Optional[str]
     created_at: str
+    citations: Optional[list[dict]]
+    verified_citations: Optional[list[dict]]
+    failed_citations: Optional[list[dict]]
 # =========== CLASS ===========
