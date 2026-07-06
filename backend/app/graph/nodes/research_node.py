@@ -1,12 +1,9 @@
-# UPDATE THE CODE
-# Task-1: uv add tenacity run karo
-# Task-2: @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10), reraise=True) decorator add karo research agent ke run() call ke upar — 3 attempts, 2 second se start, max 10 second wait
-# Task-3: retry_error_callback add karo — 3 attempts ke baad bhi fail hua toh logger.error("research_node_all_retries_failed", attempts=3) log karo
-# Task-4: Retry attempts bhi log karo — before_sleep=before_sleep_log(logger, logging.WARNING) tenacity parameter use karo
-
-# WHAT DOES THIS FILE DO: Defines the research node function for web searching and fact-gathering inside the LangGraph workflow.
+# WHAT DOES THIS FILE DO: Defines the research node function with tenacity-based retry logic for web searching inside LangGraph.
 
 # ================== IMPORTS ==================
+import logging
+from tenacity import retry, stop_after_attempt, wait_exponential, before_sleep_log
+
 from app.graph.state import GraphState
 from app.agents.research_agent import ResearchAgent
 from app.core.logging import get_logger
@@ -19,6 +16,36 @@ logger = get_logger(__name__)               # USE: Research node execution logge
 
 
 # =========== FUNCTION ===========
+# ROLE: Callback executed when all retry attempts are exhausted.
+def retry_error_callback(retry_state):
+    """ Logs the retry exhaust metadata and reraises the exception. """
+    
+    # FLOW-1: Log failure details and raise the final outcome exception
+    logger.error("research_node_all_retries_failed", attempts=3)  # USE: Write error log after 3 attempts
+    raise retry_state.outcome.exception()       # USE: Reraise target error
+# =========== FUNCTION ===========
+
+
+# =========== FUNCTION ===========
+# ROLE: Helper method wrapped in tenacity retry decorators executing research queries.
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=2, max=10),
+    reraise=True,
+    before_sleep=before_sleep_log(logger, logging.WARNING),
+    retry_error_callback=retry_error_callback
+)
+async def _execute_research(research_agent: ResearchAgent, query: str, topic: str) -> str:
+    """ Calls the research agent with query and topic payload parameters. """
+    
+    # FLOW-1: Run the research agent
+    output = await research_agent.run(query=query, topic=topic)  # USE: Run react agent
+    
+    return output
+# =========== FUNCTION ===========
+
+
+# =========== FUNCTION ===========
 # ROLE: Research node executing facts gathering via search agents in the LangGraph workflow.
 async def research_node(state: GraphState) -> dict:
     """ Conducts topic web search research using the research agent. """
@@ -26,12 +53,13 @@ async def research_node(state: GraphState) -> dict:
     # FLOW-1: Instantiate the research agent
     research_agent = ResearchAgent()            # USE: Create research agent instance
     
-    # FLOW-2: Run research react agent using query and topic state variables
+    # FLOW-2: Run research react agent with retry logic using helper function
     try:
-        research_output = await research_agent.run(
-            query=state["query"],
-            topic=state["topic"]
-        )                                       # USE: Trigger research workflow search
+        research_output = await _execute_research(
+            research_agent,
+            state["query"],
+            state["topic"]
+        )                                       # USE: Trigger research with tenacity retries
         
         # FLOW-3: Log research completed status and return partial state update
         logger.info(
