@@ -92,6 +92,18 @@ class ResearchService:
             
             async for event in self.graph.astream_events(initial_state, config=config, version="v2"):  # USE: Stream events from graph execution
                 if event.get("event") == "on_chain_end":
+                    # Check if the graph has encountered an interrupt before human_approval
+                    current_state = await self.graph.aget_state(config)  # USE: Retrieve graph state from checkpointer
+                    
+                    if current_state.next == ("human_approval",):
+                        await self.session_repo.update_status(session_id, "awaiting_approval")  # USE: Set DB status to awaiting_approval
+                        yield StreamEvent(
+                            event_type="awaiting_approval",
+                            data={"session_id": session_id, "query": request.query}
+                        )                       # USE: Yield awaiting approval payload
+                        
+                        return                  # USE: Exit generator since graph execution is paused
+                        
                     node_name = event.get("name")
                     output = event.get("data", {}).get("output")
                     
