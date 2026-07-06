@@ -1,3 +1,9 @@
+# UPDATE THE CODE
+# Task-1: uv add tenacity run karo
+# Task-2: @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10), reraise=True) decorator add karo research agent ke run() call ke upar — 3 attempts, 2 second se start, max 10 second wait
+# Task-3: retry_error_callback add karo — 3 attempts ke baad bhi fail hua toh logger.error("research_node_all_retries_failed", attempts=3) log karo
+# Task-4: Retry attempts bhi log karo — before_sleep=before_sleep_log(logger, logging.WARNING) tenacity parameter use karo
+
 # WHAT DOES THIS FILE DO: Defines the research node function for web searching and fact-gathering inside the LangGraph workflow.
 
 # ================== IMPORTS ==================

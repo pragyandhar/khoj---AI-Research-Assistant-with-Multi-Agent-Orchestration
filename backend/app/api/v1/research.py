@@ -1,3 +1,11 @@
+# UPDATE THE CODE:
+# Task-1: POST /sessions/{session_id}/approve endpoint add karo — yeh graph ko resume karta hai human approval ke baad
+# Task-2: Andar config = {"configurable": {"thread_id": session_id}} banao — LangGraph is config se sahi thread ki state dhundhta hai
+# Task-3: await app.state.graph.aupdate_state(config, {"human_approved": True}) call karo — yeh state mein approval set karta hai bina graph dobara start kiye
+# Task-4: async for event in app.state.graph.astream(None, config=config) se graph resume karo — None input isliye ki state already updated hai, naya input nahi chahiye
+# Task-5: GET /sessions/{session_id}/state endpoint add karo — await app.state.graph.aget_state(config) call karo, current state return karo — frontend graph visualizer ke liye
+# Task-6: POST /sessions/{session_id}/rollback stub ko implement karo — checkpoint_id body se lo, await app.state.graph.aupdate_state(config, values, as_node="router") se state rollback karo — as_node batata hai ki kahan se resume hoga
+
 # WHAT DOES THIS FILE DO: Defines FastAPI endpoints for executing research queries and retrieving session/report status.
 
 # ================== IMPORTS ==================

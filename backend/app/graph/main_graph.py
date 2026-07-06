@@ -6,39 +6,40 @@ from langgraph.graph import StateGraph, END
 from app.graph.state import GraphState
 from app.graph.nodes.router_node import router_node
 from app.graph.nodes.research_node import research_node
+from app.graph.nodes.human_approval_node import human_approval_node
 from app.graph.nodes.summary_node import summary_node
 from app.graph.nodes.output_node import output_node
 # ================== IMPORTS ==================
 
 
 # =========== FUNCTION ===========
-# ROLE: Compiles and builds the core StateGraph workflow.
-def build_graph():
+# ROLE: Compiles and builds the core StateGraph workflow with persistent checkpointer.
+def build_graph(checkpointer=None):
     """ Setup nodes, linear edges, entry/finish points, and compile the graph. """
     
     # FLOW-1: Instantiate StateGraph with our custom GraphState TypedDict
     workflow = StateGraph(GraphState)           # USE: Define LangGraph state machine schema
     
-    # FLOW-2: Register execution nodes
+    # FLOW-2: Register execution nodes including human approval step
     workflow.add_node("router", router_node)    # USE: Register routing stage
     workflow.add_node("research", research_node)  # USE: Register search stage
+    workflow.add_node("human_approval", human_approval_node)  # USE: Register human approval gate stage
     workflow.add_node("summary", summary_node)  # USE: Register summary parser stage
     workflow.add_node("output", output_node)    # USE: Register final output stage
     
     # FLOW-3: Configure linear routing path edges
     workflow.set_entry_point("router")          # USE: Set graph execution entry node
     workflow.add_edge("router", "research")     # USE: Step 1 edge
-    workflow.add_edge("research", "summary")    # USE: Step 2 edge
-    workflow.add_edge("summary", "output")      # USE: Step 3 edge
+    workflow.add_edge("research", "human_approval")  # USE: Route to human approval gate
+    workflow.add_edge("human_approval", "summary")  # USE: Route to summary stage
+    workflow.add_edge("summary", "output")      # USE: Route to output stage
     workflow.set_finish_point("output")         # USE: Terminate graph at output stage
     
-    # FLOW-4: Compile graph and return it
-    compiled = workflow.compile()
+    # FLOW-4: Compile graph with checkpointer and interrupt configs
+    compiled = workflow.compile(
+        checkpointer=checkpointer,
+        interrupt_before=["human_approval"]
+    )                                           # USE: Compile state machine
     
     return compiled
 # =========== FUNCTION ===========
-
-
-# =========== VARIABLES : Singleton compiled graph instance ===========
-graph = build_graph()                           # USE: Singleton graph object for orchestration
-# =========== VARIABLES : Singleton compiled graph instance ===========

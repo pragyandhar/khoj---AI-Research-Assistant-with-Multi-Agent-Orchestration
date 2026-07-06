@@ -1,3 +1,8 @@
+# UPDATE THE CODE
+# Task-1: summary_node mein report generate hone ke baad citations extract karo: citations = [c.model_dump() for section in report.sections for c in section.citations]
+# Task-2: Return dict mein citations field add karo: {"final_report": report.model_dump(), "citations": citations, "status": "citing"}
+# Task-3: GraphState mein citations: list[dict] field add karo agar nahi hai
+
 # WHAT DOES THIS FILE DO: Defines the summary node function for synthesizing research findings into structured reports inside the LangGraph workflow.
 
 # ================== IMPORTS ==================

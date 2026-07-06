@@ -1,3 +1,10 @@
+# UPDATE THE CODE:
+# Task-1: graph.astream_events() call mein config = {"configurable": {"thread_id": session_id}} pass karo
+# Task-2: Streaming loop mein interrupt detect karo — event["event"] == "on_chain_end" aur state.next == ("human_approval",) check karo
+# Task-3: Interrupt detect hone pe StreamEvent(event_type="awaiting_approval", data={"session_id": session_id, "query": request.query}) yield karo — frontend approval modal dikhayega
+# Task-4: Yield karne ke baad generator se return karo — graph paused hai, resume alag endpoint se hoga
+# Task-5: Session DB mein status = "awaiting_approval" update karo jab interrupt detect ho
+
 # WHAT DOES THIS FILE DO: Orchestrates the execution flow of query routing, research searching, and report summarizing using LangGraph.
 
 # ================== IMPORTS ==================

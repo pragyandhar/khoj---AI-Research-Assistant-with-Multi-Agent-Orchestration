@@ -1,0 +1,5 @@
+# Task-1: test_router_node_updates_topic — GraphState banao sirf query field ke saath, router_node call karo, return dict mein topic field hai verify karo
+# Task-2: test_research_node_updates_output — mock ResearchAgent ke saath research_node test karo, research_output field set hoti hai verify karo
+# Task-3: test_graph_pauses_at_human_approval — MemorySaver (in-memory checkpointer) ke saath graph build karo, invoke karo, graph human_approval pe pause hota hai verify karo — graph.get_state(config).next == ("human_approval",) check karo
+# Task-4: test_graph_resumes_after_approval — pause ke baad graph.update_state(config, {"human_approved": True}) karo, graph.invoke(None, config) se resume karo, final state mein status == "completed" verify karo
+# Task-5: test_citation_subgraph_filters_failed_urls — mock httpx client se kuch URLs fail karwao, subgraph unhe failed_citations mein daalta hai verify karo
