@@ -1,7 +1,7 @@
 # WHAT DOES THIS FILE DO: Bootstraps the FastAPI application, registers middleware, configures global exception handlers, and mounts API routers.
 
 # ================== IMPORTS ==================
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, AsyncExitStack
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -34,14 +34,16 @@ async def lifespan(app: FastAPI):
     # FLOW-1: Initialize configurations, DDL generation, and log application start
     setup_logging()                             # USE: Setup structured logger processors
     await create_all_tables()                   # USE: Generate database schemas if not exist
-    
-    # FLOW-2: Initialize checkpointer and graph in application state
-    app.state.checkpointer = await setup_checkpointer()  # USE: Setup PG checkpointer
-    app.state.graph = build_graph(app.state.checkpointer)  # USE: Compile and store graph
-    
-    logger.info("application_started", environment=settings.ENVIRONMENT)  # USE: Startup audit log
-    
-    yield
+
+    # FLOW-2: Hold the checkpointer's connection open for the app's lifetime via an exit stack,
+    # closing it automatically on shutdown when this async with block exits
+    async with AsyncExitStack() as exit_stack:
+        app.state.checkpointer = await setup_checkpointer(exit_stack)  # USE: Setup PG checkpointer
+        app.state.graph = build_graph(app.state.checkpointer)  # USE: Compile and store graph
+
+        logger.info("application_started", environment=settings.ENVIRONMENT)  # USE: Startup audit log
+
+        yield
 # =========== FUNCTION ===========
 
 
