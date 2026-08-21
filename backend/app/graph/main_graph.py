@@ -4,7 +4,7 @@
 from langgraph.graph import StateGraph, END
 
 from app.graph.state import GraphState
-from app.graph.nodes.router_node import router_node
+from app.graph.nodes.router_node import router_node, route_after_approval
 from app.graph.nodes.research_node import research_node
 from app.graph.nodes.human_approval_node import human_approval_node
 from app.graph.nodes.summary_node import summary_node
@@ -29,11 +29,19 @@ def build_graph(checkpointer=None):
     workflow.add_node("citation_check", build_citation_subgraph())  # USE: Register citation subgraph check stage
     workflow.add_node("output", output_node)    # USE: Register final output stage
     
-    # FLOW-3: Configure linear routing path edges
+    # FLOW-3: Configure routing path edges — approval gate now sits before research fires
     workflow.set_entry_point("router")          # USE: Set graph execution entry node
-    workflow.add_edge("router", "research")     # USE: Step 1 edge
-    workflow.add_edge("research", "human_approval")  # USE: Route to human approval gate
-    workflow.add_edge("human_approval", "summary")  # USE: Route to summary stage
+    workflow.add_edge("router", "human_approval")  # USE: Route straight to approval gate before any web search
+    workflow.add_conditional_edges(
+        "human_approval",
+        route_after_approval,                   # USE: Picks next node based on state["selected_agent"]
+        {
+            "science_research": "research",     # USE: All three routes converge on the same research node
+            "tech_research": "research",         # USE: research_node itself picks the specialist agent to run
+            "general_research": "research",
+        }
+    )                                           # USE: Conditional edge for dynamic post-approval agent routing
+    workflow.add_edge("research", "summary")    # USE: Route to summary stage
     workflow.add_edge("summary", "citation_check")  # USE: Route to citation check subgraph
     workflow.add_edge("citation_check", "output")  # USE: Route to output stage
     workflow.set_finish_point("output")         # USE: Terminate graph at output stage
