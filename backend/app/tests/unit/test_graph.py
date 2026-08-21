@@ -12,6 +12,7 @@ from app.graph.nodes.research_node import research_node
 from app.graph.main_graph import build_graph
 from app.graph.citation_subgraph import build_citation_subgraph, CitationState
 from app.agents.router_agent import RouteDecision
+from app.agents.citation_agent import CitationVerification
 from app.models.report import StructuredReport
 # ================== IMPORTS ==================
 
@@ -48,9 +49,11 @@ async def test_router_node_updates_topic(mock_openai):
     # FLOW-3: Invoke router_node
     result = await router_node(state)
     
-    # FLOW-4: Assert result topic matches mocked decision
+    # FLOW-4: Assert result topic matches mocked decision — router now also selects the
+    # specialist agent and pauses for approval before research runs (Phase 4)
     assert result.get("topic") == "technology"
-    assert result.get("status") == "researching"
+    assert result.get("selected_agent") == "technology"
+    assert result.get("status") == "awaiting_approval"
 # =========== FUNCTION ===========
 
 
@@ -222,6 +225,7 @@ async def test_citation_subgraph_filters_failed_urls():
     
     # FLOW-1: Setup test CitationState input
     state = CitationState(
+        query="What is quantum computing?",
         citations=[
             {"title": "Valid Source", "url": "https://example.com/ok", "relevance_score": 0.8},
             {"title": "Invalid Source", "url": "https://example.com/fail", "relevance_score": 0.5}
@@ -229,24 +233,30 @@ async def test_citation_subgraph_filters_failed_urls():
         verified_citations=[],
         failed_citations=[]
     )
-    
+
     # FLOW-2: Mock httpx AsyncClient to succeed for /ok and fail for /fail
     async def mock_head_or_get(url, *args, **kwargs):
         if "/ok" in str(url):
             return MagicMock(status_code=200)
         raise Exception("Connection Refused")
-        
+
+    # FLOW-3: Stub the citation agent's relevance check so the URL-accessible citation
+    # also passes relevance scoring, isolating this test to URL accessibility filtering
+    async def fake_run(self, claim: str, citation: dict) -> CitationVerification:
+        return CitationVerification(relevance_score=0.9, justification="Relevant.", is_valid=True)
+
     with patch("httpx.AsyncClient.head", side_effect=mock_head_or_get), \
-         patch("httpx.AsyncClient.get", side_effect=mock_head_or_get):
-         
-        # FLOW-3: Build and execute citation subgraph
+         patch("httpx.AsyncClient.get", side_effect=mock_head_or_get), \
+         patch("app.graph.citation_subgraph.CitationAgent.run", new=fake_run):
+
+        # FLOW-4: Build and execute citation subgraph
         subgraph = build_citation_subgraph()
         result = await subgraph.ainvoke(state)
-        
-        # FLOW-4: Assert citations are partitioned correctly
+
+        # FLOW-5: Assert citations are partitioned correctly
         verified = result.get("verified_citations", [])
         failed = result.get("failed_citations", [])
-        
+
         assert len(verified) == 1
         assert verified[0]["url"] == "https://example.com/ok"
         assert len(failed) == 1
