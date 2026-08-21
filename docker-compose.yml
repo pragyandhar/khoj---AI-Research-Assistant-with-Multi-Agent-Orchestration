@@ -63,8 +63,8 @@ services:
     depends_on:                        
       - backend
     ports:
-      - "3000:3000"
+      - "3000:80"                       # USE: nginx serves on 80 inside the container (see frontend/Dockerfile)
     networks:
-      - app-network                    
+      - app-network
     restart: unless-stopped
   # ========== FRONTEND SERVICE (UI) ==========
