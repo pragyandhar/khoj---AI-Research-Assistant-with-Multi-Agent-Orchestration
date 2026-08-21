@@ -3,16 +3,20 @@
 // Mirrors backend app/models/research.py ResearchStatus. The backend's own Python enum is
 // missing AWAITING_APPROVAL even though it's a real status value the API emits (added when
 // human-in-the-loop approval landed) — this type reflects what the backend actually sends.
-export enum ResearchStatus {
-  PENDING = "pending",
-  ROUTING = "routing",
-  RESEARCHING = "researching",
-  SUMMARIZING = "summarizing",
-  CITING = "citing",
-  COMPLETED = "completed",
-  FAILED = "failed",
-  AWAITING_APPROVAL = "awaiting_approval",
-}
+// A const object (not `enum`) — this project's tsconfig enables erasableSyntaxOnly, which
+// disallows TypeScript enums since they compile to more than a plain type erasure.
+export const ResearchStatus = {
+  PENDING: "pending",
+  ROUTING: "routing",
+  RESEARCHING: "researching",
+  SUMMARIZING: "summarizing",
+  CITING: "citing",
+  COMPLETED: "completed",
+  FAILED: "failed",
+  AWAITING_APPROVAL: "awaiting_approval",
+} as const
+
+export type ResearchStatus = (typeof ResearchStatus)[keyof typeof ResearchStatus]
 
 // Mirrors backend app/models/report.py Citation
 export interface Citation {
