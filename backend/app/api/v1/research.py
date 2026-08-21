@@ -38,6 +38,14 @@ class RollbackRequest(BaseModel):
 # =========== CLASS ===========
 
 
+# =========== CLASS ===========
+# ROLE: Request body schema for the approval endpoint, allowing an optional query edit.
+class ApproveRequest(BaseModel):
+    """ Optional query modification submitted alongside human approval. """
+    modified_query: str | None = None
+# =========== CLASS ===========
+
+
 # =========== FUNCTION ===========
 # ROLE: Starts research query execution and streams status and report data via SSE.
 @router.post("/query")
@@ -113,12 +121,15 @@ async def get_latest_report(session_id: str, db: DBSession):
 # =========== FUNCTION ===========
 # ROLE: Approving human check and resuming graph workflow execution.
 @router.post("/sessions/{session_id}/approve")
-async def approve_session(session_id: str, raw_request: Request, api_key: AuthKey, db: DBSession, cache: Cache):
-    """ Approve the human check gate and resume execution streaming. """
-    
+async def approve_session(session_id: str, body: ApproveRequest, raw_request: Request, api_key: AuthKey, db: DBSession, cache: Cache):
+    """ Approve the human check gate, optionally editing the query, and resume execution streaming. """
+
     # FLOW-1: Set up thread configuration and resume graph state updates
     config = {"configurable": {"thread_id": session_id}}  # USE: Config referencing the session thread
-    await raw_request.app.state.graph.aupdate_state(config, {"human_approved": True})  # USE: Update human approval flag in state
+    state_update = {"human_approved": True}     # USE: Base state update marking approval
+    if body.modified_query:
+        state_update["modified_query"] = body.modified_query  # USE: Pass user's edited query through to human_approval_node
+    await raw_request.app.state.graph.aupdate_state(config, state_update)  # USE: Update approval (and optional query edit) in state
     
     
     # =========== FUNCTION ===========
