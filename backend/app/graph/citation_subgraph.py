@@ -6,6 +6,9 @@ import asyncio
 
 import httpx
 from langgraph.graph import StateGraph
+
+from app.agents.citation_agent import CitationAgent
+from app.core.exceptions import LLMException
 # ================== IMPORTS ==================
 
 
@@ -13,7 +16,8 @@ from langgraph.graph import StateGraph
 # ROLE: State schema tracking citations check execution.
 class CitationState(TypedDict):
     """ TypedDict schema tracking citations verification progress. """
-    
+
+    query: str
     citations: list[dict]
     verified_citations: list[dict]
     failed_citations: list[dict]
@@ -77,21 +81,50 @@ async def verify_citation_node(state: CitationState) -> dict:
 
 
 # =========== FUNCTION ===========
-# ROLE: Scores and limits verified citations to the top 5 highest relevance.
+# ROLE: Checks a single citation's relevance against the research claim via the citation agent.
+async def _verify_single_relevance(citation_agent: CitationAgent, claim: str, citation: dict) -> dict | None:
+    """ Returns the citation with an LLM-assessed relevance_score, or None if it fails/is irrelevant. """
+
+    try:
+        verification = await citation_agent.run(claim=claim, citation=citation)
+    except LLMException:
+        return None
+
+    if not verification.is_valid or verification.relevance_score < 0.5:
+        return None
+
+    scored_citation = dict(citation)            # USE: Avoid mutating the original citation dict
+    scored_citation["relevance_score"] = verification.relevance_score  # USE: Overwrite with LLM-verified score
+
+    return scored_citation
+# =========== FUNCTION ===========
+
+
+# =========== FUNCTION ===========
+# ROLE: Verifies relevance of URL-accessible citations and limits the result to the top 5.
 async def score_citations_node(state: CitationState) -> dict:
-    """ Sorts and truncates verified citations list to top 5. """
-    
+    """ Drops citations that don't actually support the claim, then sorts and truncates to top 5. """
+
     verified = state.get("verified_citations") or []
-    
+    claim = state.get("query", "")
+
+    citation_agent = CitationAgent()            # USE: Shared agent instance for this batch of citations
+
+    # Verify relevance for every URL-accessible citation in parallel
+    relevance_checked = await asyncio.gather(
+        *[_verify_single_relevance(citation_agent, claim, citation) for citation in verified]
+    )                                           # USE: Parallel LLM relevance checks
+    relevant_citations = [citation for citation in relevance_checked if citation is not None]  # USE: Drop failed/irrelevant citations
+
     # Sort by relevance_score in descending order
     sorted_citations = sorted(
-        verified,
+        relevant_citations,
         key=lambda c: float(c.get("relevance_score", 0.0)),
         reverse=True
     )                                           # USE: Sort citations descending
-    
+
     top_5 = sorted_citations[:5]                # USE: Keep top 5 elements
-    
+
     return {"verified_citations": top_5}
 # =========== FUNCTION ===========
 
