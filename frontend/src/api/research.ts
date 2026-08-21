@@ -63,7 +63,8 @@ export async function submitQuery(
   query: string,
   onEvent: (event: StreamEvent) => void,
   onError: (error: unknown) => void,
-  userId?: string
+  userId?: string,
+  signal?: AbortSignal
 ): Promise<void> {
   const response = await fetch(`${BASE_URL}/research/query`, {
     method: "POST",
@@ -73,6 +74,7 @@ export async function submitQuery(
       "X-Request-ID": crypto.randomUUID(),
     },
     body: JSON.stringify({ query, user_id: userId ?? null }),
+    signal,
   })
 
   await streamSSE(response, onEvent, onError)
@@ -86,7 +88,8 @@ export async function approveResearch(
   sessionId: string,
   onEvent: (event: StreamEvent) => void,
   onError: (error: unknown) => void,
-  modifiedQuery?: string
+  modifiedQuery?: string,
+  signal?: AbortSignal
 ): Promise<void> {
   const response = await fetch(`${BASE_URL}/research/sessions/${sessionId}/approve`, {
     method: "POST",
@@ -96,6 +99,7 @@ export async function approveResearch(
       "X-Request-ID": crypto.randomUUID(),
     },
     body: JSON.stringify({ modified_query: modifiedQuery ?? null }),
+    signal,
   })
 
   await streamSSE(response, onEvent, onError)
