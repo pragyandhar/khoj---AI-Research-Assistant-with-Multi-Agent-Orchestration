@@ -17,15 +17,6 @@ logger = get_logger(__name__)               # USE: Research node execution logge
 # =========== VARIABLES : Research Node Loggers ===========
 
 
-# =========== VARIABLES : Specialist Agent Factory Map ===========
-AGENT_MAP = {
-    "science": ScienceResearchAgent,
-    "technology": TechnologyResearchAgent,
-    "general": ResearchAgent,
-}                                            # USE: Maps selected_agent key to its specialist agent class
-# =========== VARIABLES : Specialist Agent Factory Map ===========
-
-
 # =========== FUNCTION ===========
 # ROLE: Callback executed when all retry attempts are exhausted.
 def retry_error_callback(retry_state):
@@ -77,9 +68,16 @@ async def _execute_research(research_agent: BaseAgent, query: str, topic: str) -
 async def research_node(state: GraphState) -> dict:
     """ Conducts topic web search research using the selected specialist agent. """
 
-    # FLOW-1: Select the specialist agent class based on router's classification
+    # FLOW-1: Select the specialist agent class based on router's classification.
+    # Built here (not module-level) so the class names resolve dynamically each call —
+    # this keeps unit tests able to patch e.g. app.graph.nodes.research_node.ResearchAgent.
+    agent_map = {
+        "science": ScienceResearchAgent,
+        "technology": TechnologyResearchAgent,
+        "general": ResearchAgent,
+    }                                            # USE: Maps selected_agent key to its specialist agent class
     selected_agent = state.get("selected_agent", "general")  # USE: Agent key chosen by router_node
-    AgentClass = AGENT_MAP.get(selected_agent, ResearchAgent)  # USE: Fall back to general researcher on unknown key
+    AgentClass = agent_map.get(selected_agent, ResearchAgent)  # USE: Fall back to general researcher on unknown key
     research_agent = AgentClass()               # USE: Instantiate the chosen specialist agent
 
     logger.info("research_node_started", selected_agent=selected_agent, topic=state["topic"])  # USE: Node audit logging
