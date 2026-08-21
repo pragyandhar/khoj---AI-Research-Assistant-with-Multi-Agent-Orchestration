@@ -20,6 +20,7 @@ from app.models.report import StructuredReport
 from app.repositories.report_repository import ReportRepository
 from app.repositories.session_repository import SessionRepository
 from app.services.cache_service import CacheService
+from app.services.embedding_service import EmbeddingService
 # ================== IMPORTS ==================
 
 
@@ -31,14 +32,15 @@ class ResearchService:
 
     # =========== FUNCTION ===========
     # ROLE: Initialize ResearchService with database, cache repositories, and graph workflow.
-    def __init__(self, session_repository: SessionRepository, report_repository: ReportRepository, cache_service: CacheService = None, graph = None):
+    def __init__(self, session_repository: SessionRepository, report_repository: ReportRepository, cache_service: CacheService = None, graph = None, embedding_service: EmbeddingService = None):
         """ Setup database repositories and cache service layer. """
-        
+
         # FLOW-1: Assign repository, cache service, and graph dependencies
         self.session_repo = session_repository  # USE: Session data table access repository
         self.report_repo = report_repository    # USE: Report data table access repository
         self.cache_service = cache_service      # USE: Optional Cache service layer instance
         self.graph = graph                      # USE: Compiled LangGraph workflow instance
+        self.embedding_service = embedding_service  # USE: Optional service indexing reports into ChromaDB for RAG
     # =========== FUNCTION ===========
 
 
@@ -152,12 +154,15 @@ class ResearchService:
             )                                   # USE: Instantiate Report ORM model
             await self.report_repo.create(db_report)  # USE: Persist report to database
             await self.session_repo.update_status(session_id, "completed")  # USE: Mark session completed in DB
-            
+
             report_obj = StructuredReport.model_validate(final_report_dict)  # USE: Validate dict to Pydantic object
-            
+
             if self.cache_service:
                 await self.cache_service.set(request.query, report_obj)  # USE: Save to Redis Cache
-                
+
+            if self.embedding_service:
+                await self.embedding_service.index_report(report_obj, session_id)  # USE: Index report chunks into ChromaDB for future RAG
+
             yield StreamEvent(event_type="report", data=final_report_dict)  # USE: Stream final output report
             
         except Exception as e:
