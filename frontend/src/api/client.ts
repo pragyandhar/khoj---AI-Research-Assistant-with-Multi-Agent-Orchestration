@@ -2,11 +2,16 @@
 
 import axios from "axios"
 
-// USE: Single source of truth for the backend base URL and API key, shared by every API call
+// USE: Single source of truth for the backend base URL and API key, shared by every API call —
+// including the fetch()-based SSE streaming calls in api/research.ts, which can't go through
+// an Axios instance's interceptors/defaults.
+export const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000/api/v1"
+export const API_KEY = import.meta.env.VITE_API_KEY
+
 export const apiClient = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || "http://localhost:8000/api/v1",
+  baseURL: BASE_URL,
   headers: {
-    Authorization: import.meta.env.VITE_API_KEY,
+    Authorization: API_KEY,
   },
 })
 
