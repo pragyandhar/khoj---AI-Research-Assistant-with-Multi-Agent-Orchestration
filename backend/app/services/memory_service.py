@@ -20,8 +20,13 @@ class MemoryService:
 
     # =========== FUNCTION ===========
     # ROLE: Initialize MemoryService with its Postgres repository and the LangGraph Store.
-    def __init__(self, memory_repository: UserMemoryRepository, store):
-        """ Store the user memory repository and LangGraph async store dependencies. """
+    def __init__(self, memory_repository: UserMemoryRepository, store=None):
+        """ Store the user memory repository and LangGraph async store dependencies.
+
+        `store` is optional: save_research_preference()/get_user_context() only need the
+        Postgres-backed repository, while store_in_langgraph_store()/get_from_langgraph_store()
+        need a real LangGraph store instance.
+        """
 
         # FLOW-1: Assign repository and store dependencies
         self.memory_repo = memory_repository    # USE: PostgreSQL-backed UserMemory repository

@@ -44,3 +44,17 @@ class BaseAgent(ABC):
         pass
     # =========== FUNCTION ===========
 # =========== CLASS ===========
+
+
+# =========== FUNCTION ===========
+# ROLE: Shared human-turn formatter injecting RAG and long-term memory context ahead of the query.
+def build_research_message(query: str, retrieved_context: str = "", memory_context: str = "") -> str:
+    """ Formats the research agents' human turn so both context sources precede the query. """
+
+    # FLOW-1: Lay out past-research and user-preference context before the actual query
+    return (
+        f"Previous research context: {retrieved_context or 'None available.'}\n"
+        f"User preferences: {memory_context or 'None available.'}\n"
+        f"Now research: {query}"
+    )
+# =========== FUNCTION ===========

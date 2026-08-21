@@ -81,14 +81,16 @@ async def test_research_node_updates_output():
         failed_citations=[]
     )
     
-    # FLOW-2: Mock ResearchAgent instance and run result
-    with patch("app.graph.nodes.research_node.ResearchAgent") as MockResearchAgent:
+    # FLOW-2: Mock ResearchAgent instance and rag_search tool call (avoid hitting real ChromaDB)
+    with patch("app.graph.nodes.research_node.ResearchAgent") as MockResearchAgent, \
+         patch("app.graph.nodes.research_node.rag_search") as mock_rag_search:
         mock_agent_instance = MockResearchAgent.return_value
         mock_agent_instance.run = AsyncMock(return_value="Mocked research details and findings.")
-        
+        mock_rag_search.ainvoke = AsyncMock(return_value="No relevant past research found.")
+
         # FLOW-3: Execute research_node
         result = await research_node(state)
-        
+
         # FLOW-4: Verify results output is populated
         assert result.get("research_output") == "Mocked research details and findings."
         assert result.get("status") == "summarizing"
@@ -203,11 +205,14 @@ async def test_graph_resumes_after_approval(mock_openai):
     # FLOW-4: Update state setting human_approved flag to True
     await graph.aupdate_state(config, {"human_approved": True}, as_node="human_approval")
     
-    # FLOW-5: Mock verification of HTTP requests inside citation check node to return True
-    with patch("httpx.AsyncClient.head") as mock_head, patch("httpx.AsyncClient.get") as mock_get:
+    # FLOW-5: Mock verification of HTTP requests inside citation check node to return True,
+    # and the rag_search tool call inside research_node to avoid hitting real ChromaDB
+    with patch("httpx.AsyncClient.head") as mock_head, patch("httpx.AsyncClient.get") as mock_get, \
+         patch("app.graph.nodes.research_node.rag_search") as mock_rag_search:
         mock_head.return_value = MagicMock(status_code=200)
         mock_get.return_value = MagicMock(status_code=200)
-        
+        mock_rag_search.ainvoke = AsyncMock(return_value="No relevant past research found.")
+
         # FLOW-6: Resume execution by invoking graph with None input
         final_state = await graph.ainvoke(None, config=config)
         

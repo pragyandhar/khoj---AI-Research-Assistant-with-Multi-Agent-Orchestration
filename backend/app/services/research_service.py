@@ -83,7 +83,11 @@ class ResearchService:
                 messages=[],
                 human_approved=False,
                 graph_checkpoint_id=None,
-                created_at=datetime.utcnow().isoformat()
+                created_at=datetime.utcnow().isoformat(),
+                user_id=request.user_id,
+                retrieved_context=None,
+                memory_context=None,
+                indexed_to_chroma=False,
             )                                   # USE: Instantiate graph input state payload
             
             # FLOW-4: Run streaming graph execution events and yield status updates

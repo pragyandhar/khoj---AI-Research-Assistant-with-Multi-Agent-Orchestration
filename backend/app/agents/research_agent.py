@@ -3,7 +3,7 @@
 # ================== IMPORTS ==================
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 
-from app.agents.base_agent import BaseAgent
+from app.agents.base_agent import BaseAgent, build_research_message
 from app.agents.memory_agent import MemoryMixin
 from app.core.exceptions import LLMException
 from app.tools.web_search import web_search
@@ -31,9 +31,9 @@ class ResearchAgent(BaseAgent, MemoryMixin):
 
     # =========== FUNCTION ===========
     # ROLE: Conduct research on a topic by querying the search tools.
-    async def run(self, query: str, topic: str) -> str:
+    async def run(self, query: str, topic: str, retrieved_context: str = "", memory_context: str = "") -> str:
         """ Run the research react agent on the provided query. """
-        
+
         # FLOW-1: Setup dynamic, detailed system prompt instruction
         system_prompt = (
             f"You are an elite, highly detailed research specialist in the field of {topic}.\n"
@@ -44,12 +44,13 @@ class ResearchAgent(BaseAgent, MemoryMixin):
             "3. Synthesize information from multiple search results. Organize the retrieved facts logically, note any contradictions, and provide rich technical context.\n"
             "4. Do not hallucinate. Do not make up search results, URLs, or facts. Every claim you make must be directly backed by the search output."
         )                                       # USE: Rich research directives formatting
-        
+
         # FLOW-2: Get previous message history list from memory
         memory_messages = self.get_memory_context()  # USE: Retrieve history messages list
-        
-        # FLOW-3: Prep messages payload with system prompt, history and query
-        input_messages = [SystemMessage(content=system_prompt)] + memory_messages + [HumanMessage(content=query)]  # USE: Concat message array
+
+        # FLOW-3: Prep messages payload with system prompt, history, and RAG/memory-context-aware query
+        human_content = build_research_message(query, retrieved_context, memory_context)  # USE: Inject past research and user preferences ahead of the query
+        input_messages = [SystemMessage(content=system_prompt)] + memory_messages + [HumanMessage(content=human_content)]  # USE: Concat message array
         
         # FLOW-4: Execute target langchain reactive agent graph and parse response messages
         try:

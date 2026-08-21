@@ -3,7 +3,7 @@
 # ================== IMPORTS ==================
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 
-from app.agents.base_agent import BaseAgent
+from app.agents.base_agent import BaseAgent, build_research_message
 from app.core.exceptions import LLMException
 from app.tools.web_search import web_search
 # ================== IMPORTS ==================
@@ -33,14 +33,15 @@ class TechnologyResearchAgent(BaseAgent):
 
     # =========== FUNCTION ===========
     # ROLE: Conduct technology-focused research on a topic by querying search tools.
-    async def run(self, query: str, topic: str) -> str:
+    async def run(self, query: str, topic: str, retrieved_context: str = "", memory_context: str = "") -> str:
         """ Run the research react agent using the technology specialist prompt. """
 
         # FLOW-1: Inject topic context into the fixed specialist system prompt
         system_prompt = f"{self.SYSTEM_PROMPT}\n\nCurrent research topic: {topic}."  # USE: Topic-aware specialist prompt
 
-        # FLOW-2: Prep messages payload with system prompt and query
-        input_messages = [SystemMessage(content=system_prompt), HumanMessage(content=query)]  # USE: Message list for react agent
+        # FLOW-2: Prep messages payload with system prompt and RAG/memory-context-aware query
+        human_content = build_research_message(query, retrieved_context, memory_context)  # USE: Inject past research and user preferences ahead of the query
+        input_messages = [SystemMessage(content=system_prompt), HumanMessage(content=human_content)]  # USE: Message list for react agent
 
         # FLOW-3: Execute target langchain reactive agent graph and parse response messages
         try:
