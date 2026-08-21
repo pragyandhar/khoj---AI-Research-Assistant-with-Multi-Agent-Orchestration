@@ -235,6 +235,22 @@ def mock_openai():
 
 
 # =========== FUNCTION ===========
+# ROLE: Mocks the ChromaDB collection used by research endpoints, avoiding real disk I/O.
+@pytest.fixture
+def mock_chroma_collection():
+    """ Patches get_chroma_collection() at its research.py call site with an in-memory stub. """
+
+    # FLOW-1: Build a stub collection with no-op async add/query methods
+    mock_collection = MagicMock()
+    mock_collection.add = AsyncMock()
+    mock_collection.query = AsyncMock(return_value={"documents": [[]], "metadatas": [[]]})  # USE: Empty match by default
+
+    with patch("app.api.v1.research.get_chroma_collection", AsyncMock(return_value=mock_collection)):
+        yield mock_collection
+# =========== FUNCTION ===========
+
+
+# =========== FUNCTION ===========
 # ROLE: Setup SQLite in-memory database session fixture overriding production DB connections.
 @pytest.fixture
 async def test_db():

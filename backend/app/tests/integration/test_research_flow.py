@@ -12,7 +12,7 @@ from app.models.report import StructuredReport
 # =========== FUNCTION ===========
 # ROLE: Verify that research query endpoint returns a valid text/event-stream response.
 @pytest.mark.asyncio
-async def test_research_endpoint_returns_stream(app_client, test_db, mock_openai):
+async def test_research_endpoint_returns_stream(app_client, test_db, mock_openai, mock_chroma_collection):
     """ Verifies successful query triggers text/event-stream SSE output. """
     
     # FLOW-1: Setup Authorization headers and valid search query payload

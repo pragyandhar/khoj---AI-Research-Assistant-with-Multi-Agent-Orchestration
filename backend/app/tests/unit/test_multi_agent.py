@@ -104,7 +104,7 @@ async def test_citation_agent_scores_relevance():
 # =========== FUNCTION ===========
 # ROLE: Verifies a modified_query submitted at approval time is passed into the graph state update.
 @pytest.mark.asyncio
-async def test_query_modification_on_approval(app_client, test_db):
+async def test_query_modification_on_approval(app_client, test_db, mock_chroma_collection):
     """ Verifies POST /approve forwards modified_query into the graph state update. """
 
     # FLOW-1: Reset the shared mocked graph's aupdate_state call history for a clean assertion

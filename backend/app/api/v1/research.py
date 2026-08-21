@@ -19,11 +19,14 @@ from app.db.tables.reports import Report
 from app.models.research import ResearchRequest, StreamEvent
 from app.models.report import StructuredReport
 from app.models.session import SessionState
+from app.repositories.document_repository import DocumentRepository
 from app.repositories.report_repository import ReportRepository
 from app.repositories.session_repository import SessionRepository
 from app.services.cache_service import CacheService
+from app.services.embedding_service import EmbeddingService
 from app.services.research_service import ResearchService
 from app.services.session_service import SessionService
+from app.tools.rag_retriever import get_chroma_collection
 # ================== IMPORTS ==================
 
 
@@ -58,11 +61,14 @@ async def start_research(request: ResearchRequest, raw_request: Request, api_key
     session_repo = SessionRepository(db)        # USE: Session repository instance
     report_repo = ReportRepository(db)          # USE: Report repository instance
     cache_service = CacheService(cache)         # USE: Cache service client wrapper instance
+    chroma_collection = await get_chroma_collection()  # USE: Shared ChromaDB collection handle
+    embedding_service = EmbeddingService(chroma_collection, DocumentRepository(db))  # USE: Indexes completed reports for future RAG
     research_service = ResearchService(
         session_repo,
         report_repo,
         cache_service,
-        graph=raw_request.app.state.graph
+        graph=raw_request.app.state.graph,
+        embedding_service=embedding_service
     )                                           # USE: Instantiate service orchestrator
     
     
@@ -187,7 +193,12 @@ async def approve_session(session_id: str, body: ApproveRequest, raw_request: Re
             report_obj = StructuredReport.model_validate(final_report_dict)  # USE: Parse dict to Pydantic object
             cache_service = CacheService(cache)  # USE: Cache service client wrapper instance
             await cache_service.set(query, report_obj)  # USE: Save report object in cache
-            
+
+            # Index the report into ChromaDB for future RAG retrieval
+            chroma_collection = await get_chroma_collection()  # USE: Shared ChromaDB collection handle
+            embedding_service = EmbeddingService(chroma_collection, DocumentRepository(db))  # USE: Indexes this report's chunks
+            await embedding_service.index_report(report_obj, session_id)
+
             yield f"data: {StreamEvent(event_type='report', data=final_report_dict).model_dump_json()}\n\n"  # USE: Yield final report SSE payload
     # =========== FUNCTION ===========
     
