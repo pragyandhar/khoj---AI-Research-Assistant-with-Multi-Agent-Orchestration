@@ -12,6 +12,7 @@ export function useStream() {
   const abortControllerRef = useRef<AbortController | null>(null)
   const handleStreamEvent = useResearchStore((state) => state.handleStreamEvent)
   const setError = useResearchStore((state) => state.setError)
+  const setIsLoading = useResearchStore((state) => state.setIsLoading)
 
   // FLOW-1: Abort whatever stream is currently in flight, if any
   const stopStream = useCallback(() => {
@@ -19,13 +20,16 @@ export function useStream() {
     abortControllerRef.current = null
   }, [])
 
-  // FLOW-2: Report a stream failure, but only if it wasn't just us aborting it on purpose
+  // FLOW-2: Report a stream failure, but only if it wasn't just us aborting it on purpose.
+  // A failure here (network error, non-2xx response) never produces a StreamEvent, so nothing
+  // would otherwise clear isLoading — without this it stays stuck true forever.
   const reportStreamError = useCallback(
     (controller: AbortController, error: unknown) => {
       if (controller.signal.aborted) return
       setError(error instanceof Error ? error.message : "Research stream failed")
+      setIsLoading(false)
     },
-    [setError]
+    [setError, setIsLoading]
   )
 
   // FLOW-3: Start a brand new research query stream

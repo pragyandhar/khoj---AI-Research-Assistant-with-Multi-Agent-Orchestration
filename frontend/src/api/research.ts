@@ -66,18 +66,26 @@ export async function submitQuery(
   userId?: string,
   signal?: AbortSignal
 ): Promise<void> {
-  const response = await fetch(`${BASE_URL}/research/query`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: API_KEY,
-      "X-Request-ID": crypto.randomUUID(),
-    },
-    body: JSON.stringify({ query, user_id: userId ?? null }),
-    signal,
-  })
+  // FLOW-1: fetch() itself rejects on network failure (backend unreachable, DNS, CORS block —
+  // before there's even a Response) — that rejection has to be caught here and routed through
+  // onError too, or it becomes an unhandled promise rejection with no user-facing feedback and
+  // isLoading stuck true forever, since the caller only awaits this via `void submitQuery(...)`.
+  try {
+    const response = await fetch(`${BASE_URL}/research/query`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: API_KEY,
+        "X-Request-ID": crypto.randomUUID(),
+      },
+      body: JSON.stringify({ query, user_id: userId ?? null }),
+      signal,
+    })
 
-  await streamSSE(response, onEvent, onError)
+    await streamSSE(response, onEvent, onError)
+  } catch (error) {
+    onError(error)
+  }
 }
 // =========== FUNCTION ===========
 
@@ -91,18 +99,24 @@ export async function approveResearch(
   modifiedQuery?: string,
   signal?: AbortSignal
 ): Promise<void> {
-  const response = await fetch(`${BASE_URL}/research/sessions/${sessionId}/approve`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: API_KEY,
-      "X-Request-ID": crypto.randomUUID(),
-    },
-    body: JSON.stringify({ modified_query: modifiedQuery ?? null }),
-    signal,
-  })
+  // FLOW-1: see submitQuery's matching comment — fetch() itself can reject before streamSSE
+  // ever runs, and that needs to reach onError too.
+  try {
+    const response = await fetch(`${BASE_URL}/research/sessions/${sessionId}/approve`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: API_KEY,
+        "X-Request-ID": crypto.randomUUID(),
+      },
+      body: JSON.stringify({ modified_query: modifiedQuery ?? null }),
+      signal,
+    })
 
-  await streamSSE(response, onEvent, onError)
+    await streamSSE(response, onEvent, onError)
+  } catch (error) {
+    onError(error)
+  }
 }
 // =========== FUNCTION ===========
 
