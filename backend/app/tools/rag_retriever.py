@@ -46,6 +46,15 @@ class _AsyncCollectionWrapper:
             return await self._collection.add(**kwargs)  # USE: Native async add call
 
         return await asyncio.to_thread(self._collection.add, **kwargs)  # USE: Run sync add without blocking the event loop
+
+
+    async def count(self) -> int:
+        """ Returns the number of documents currently stored in the collection. """
+
+        if self._is_async:
+            return await self._collection.count()  # USE: Native async count call
+
+        return await asyncio.to_thread(self._collection.count)  # USE: Run sync count without blocking the event loop
 # =========== CLASS ===========
 
 
