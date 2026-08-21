@@ -16,15 +16,32 @@ logger = get_logger(__name__)               # USE: Router node execution logger 
 # ROLE: Router node classifying the query topic to direct the workflow execution graph.
 async def router_node(state: GraphState) -> dict:
     """ Executes query topic classification using the router agent. """
-    
+
     # FLOW-1: Instantiate the router agent
     router_agent = RouterAgent()                # USE: Create router agent instance
-    
+
     # FLOW-2: Classify the topic category from the user query
     topic = await router_agent.run(query=state["query"])  # USE: Run classification logic
-    
+
     # FLOW-3: Log result and return updated state attributes
     logger.info("router_node_completed", query=state["query"], topic=topic)  # USE: Node audit logging
-    
-    return {"topic": topic, "status": "researching"}
+
+    # FLOW-4: Topic value doubles as the specialist agent key ("science"/"technology"/"general")
+    return {"topic": topic, "selected_agent": topic, "status": "awaiting_approval"}
+# =========== FUNCTION ===========
+
+
+# =========== FUNCTION ===========
+# ROLE: Conditional edge function selecting the next node based on the router's agent choice.
+def route_after_approval(state: GraphState) -> str:
+    """ Returns the routing key LangGraph uses to pick the next node after human approval. """
+
+    # FLOW-1: Map the selected specialist agent to its conditional edge routing key
+    routing_map = {
+        "science": "science_research",
+        "technology": "tech_research",
+        "general": "general_research",
+    }                                            # USE: Agent key to routing key lookup
+
+    return routing_map.get(state.get("selected_agent"), "general_research")  # USE: Default to general on unknown/missing agent
 # =========== FUNCTION ===========
