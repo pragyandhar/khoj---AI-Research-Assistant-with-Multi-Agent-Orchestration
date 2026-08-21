@@ -27,4 +27,6 @@ class GraphState(TypedDict):
     citations: Optional[list[dict]]
     verified_citations: Optional[list[dict]]
     failed_citations: Optional[list[dict]]
+    selected_agent: Optional[str]
+    modified_query: Optional[str]
 # =========== CLASS ===========
