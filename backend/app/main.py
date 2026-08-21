@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager, AsyncExitStack
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from langgraph.store.postgres.aio import AsyncPostgresStore
 
 from app.api.v1.router import api_router
 from app.core.config import settings
@@ -35,11 +36,23 @@ async def lifespan(app: FastAPI):
     setup_logging()                             # USE: Setup structured logger processors
     await create_all_tables()                   # USE: Generate database schemas if not exist
 
-    # FLOW-2: Hold the checkpointer's connection open for the app's lifetime via an exit stack,
-    # closing it automatically on shutdown when this async with block exits
+    # FLOW-2: Hold the checkpointer's and store's connections open for the app's lifetime via
+    # an exit stack, closing them automatically on shutdown when this async with block exits
     async with AsyncExitStack() as exit_stack:
         app.state.checkpointer = await setup_checkpointer(exit_stack)  # USE: Setup PG checkpointer
-        app.state.graph = build_graph(app.state.checkpointer)  # USE: Compile and store graph
+
+        # FLOW-3: AsyncPostgresStore.from_conn_string() is an @asynccontextmanager too (same
+        # gotcha as AsyncPostgresSaver) — enter it via exit_stack, not a bare call, and use the
+        # plain postgresql:// driver rather than the asyncpg one DATABASE_URL is configured with.
+        store_conn_string = settings.DATABASE_URL
+        if store_conn_string.startswith("postgresql+asyncpg://"):
+            store_conn_string = store_conn_string.replace("postgresql+asyncpg://", "postgresql://")  # USE: Replace asyncpg driver
+        app.state.store = await exit_stack.enter_async_context(
+            AsyncPostgresStore.from_conn_string(store_conn_string)
+        )                                       # USE: Long-term memory store, connection held open
+        await app.state.store.setup()           # USE: Create store tables in database schema
+
+        app.state.graph = build_graph(app.state.checkpointer, app.state.store)  # USE: Compile and store graph
 
         logger.info("application_started", environment=settings.ENVIRONMENT)  # USE: Startup audit log
 

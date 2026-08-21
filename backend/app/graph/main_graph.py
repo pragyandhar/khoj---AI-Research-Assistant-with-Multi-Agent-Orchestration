@@ -14,8 +14,8 @@ from app.graph.citation_subgraph import build_citation_subgraph
 
 
 # =========== FUNCTION ===========
-# ROLE: Compiles and builds the core StateGraph workflow with persistent checkpointer.
-def build_graph(checkpointer=None):
+# ROLE: Compiles and builds the core StateGraph workflow with persistent checkpointer and store.
+def build_graph(checkpointer=None, store=None):
     """ Setup nodes, linear edges, entry/finish points, and compile the graph. """
     
     # FLOW-1: Instantiate StateGraph with our custom GraphState TypedDict
@@ -46,9 +46,10 @@ def build_graph(checkpointer=None):
     workflow.add_edge("citation_check", "output")  # USE: Route to output stage
     workflow.set_finish_point("output")         # USE: Terminate graph at output stage
     
-    # FLOW-4: Compile graph with checkpointer and interrupt configs
+    # FLOW-4: Compile graph with checkpointer, long-term memory store, and interrupt configs
     compiled = workflow.compile(
         checkpointer=checkpointer,
+        store=store,                             # USE: Long-term memory store, available to nodes via LangGraph's store injection
         interrupt_before=["human_approval"]
     )                                           # USE: Compile state machine
     
