@@ -16,6 +16,7 @@ class ResearchRequest(BaseModel):
     query: str = Field(..., min_length=10, max_length=500, description="Research query")  # USE: The main prompt/question
     topic_hint: str | None = Field(None, description="Optional topic hint")  # USE: Categorization hint
     session_id: str | None = Field(None, description="Existing session ID for continuation")  # USE: Connect to historical state
+    user_id: str | None = Field(None, description="Owning user's identifier, for long-term memory")  # USE: Ties session to cross-session memory; None until auth lands
 # =========== CLASS ===========
 
 

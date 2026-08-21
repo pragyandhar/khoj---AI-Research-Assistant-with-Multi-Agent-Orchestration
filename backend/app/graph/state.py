@@ -29,4 +29,8 @@ class GraphState(TypedDict):
     failed_citations: Optional[list[dict]]
     selected_agent: Optional[str]
     modified_query: Optional[str]
+    user_id: Optional[str]
+    retrieved_context: Optional[str]
+    memory_context: Optional[str]
+    indexed_to_chroma: bool
 # =========== CLASS ===========
