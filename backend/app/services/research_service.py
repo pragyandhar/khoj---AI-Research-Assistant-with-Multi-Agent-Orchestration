@@ -107,23 +107,25 @@ class ResearchService:
                     node_name = event.get("name")
                     output = event.get("data", {}).get("output")
                     
-                    # If this is one of our registered nodes, accumulate output and update progress
+                    # If this is one of our registered nodes, accumulate output and update progress.
+                    # Node order is now router -> human_approval (pause) -> research -> summary -> citation_check -> output,
+                    # so each status reflects the node that runs NEXT after the one that just completed.
                     if node_name in ["router", "research", "human_approval", "summary", "citation_check", "output"] and isinstance(output, dict):
                         state_accumulator.update(output)  # USE: Accumulate node output state attributes
-                        
+
                         if node_name == "router":
                             topic = output.get("topic", "")
-                            await self.session_repo.update_status(session_id, "researching")  # USE: Update session status in DB
-                            yield StreamEvent(event_type="status", data={"status": "researching", "topic": topic})  # USE: Stream status event
-                            
-                        elif node_name == "research":
-                            await self.session_repo.update_status(session_id, "awaiting_approval")  # USE: Wait for approval
-                            yield StreamEvent(event_type="status", data={"status": "awaiting_approval"})  # USE: Stream status event
-                            
+                            await self.session_repo.update_status(session_id, "awaiting_approval")  # USE: Update session status in DB
+                            yield StreamEvent(event_type="status", data={"status": "awaiting_approval", "topic": topic})  # USE: Stream status event
+
                         elif node_name == "human_approval":
+                            await self.session_repo.update_status(session_id, "researching")  # USE: Update session status in DB
+                            yield StreamEvent(event_type="status", data={"status": "researching"})  # USE: Stream status event
+
+                        elif node_name == "research":
                             await self.session_repo.update_status(session_id, "summarizing")  # USE: Update session status in DB
                             yield StreamEvent(event_type="status", data={"status": "summarizing"})  # USE: Stream status event
-                            
+
                         elif node_name == "summary":
                             await self.session_repo.update_status(session_id, "citing")  # USE: Update session status in DB
                             yield StreamEvent(event_type="status", data={"status": "citing"})  # USE: Stream status event

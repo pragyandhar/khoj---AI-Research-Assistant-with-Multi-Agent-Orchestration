@@ -144,16 +144,26 @@ async def approve_session(session_id: str, body: ApproveRequest, raw_request: Re
         
         state_accumulator = {}                  # USE: Accumulate output attributes
         
-        # FLOW-1: Resume graph run and loop through events
+        # FLOW-1: Resume graph run and loop through events.
+        # Node order post-approval is human_approval -> research -> summary -> citation_check -> output,
+        # so each status reflects the node that runs NEXT after the one that just completed.
         async for event in raw_request.app.state.graph.astream(None, config=config):  # USE: Resume stream with empty input payload
             for node_name, output in event.items():  # USE: Loop over node output dicts
                 if isinstance(output, dict):
                     state_accumulator.update(output)  # USE: Accumulate node output dictionary
-                    
+
                     if node_name == "human_approval":
+                        await session_repo.update_status(session_id, "researching")  # USE: Update DB status to researching
+                        yield f"data: {StreamEvent(event_type='status', data={'status': 'researching'}).model_dump_json()}\n\n"
+
+                    elif node_name == "research":
                         await session_repo.update_status(session_id, "summarizing")  # USE: Update DB status to summarizing
                         yield f"data: {StreamEvent(event_type='status', data={'status': 'summarizing'}).model_dump_json()}\n\n"
-                        
+
+                    elif node_name == "summary":
+                        await session_repo.update_status(session_id, "citing")  # USE: Update DB status to citing
+                        yield f"data: {StreamEvent(event_type='status', data={'status': 'citing'}).model_dump_json()}\n\n"
+
         # FLOW-2: Retrieve and persist report results
         final_report_dict = state_accumulator.get("final_report")
         if final_report_dict:
