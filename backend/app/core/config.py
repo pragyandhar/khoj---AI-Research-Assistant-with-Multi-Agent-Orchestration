@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "development"    # USE: Current environment type
     LOG_LEVEL: str = "INFO"             # USE: App logging level default
     CORS_ORIGINS: list[str] = ["http://localhost:3000"]  # USE: Allowed origins list for cors middleware
+    CHROMA_PERSIST_PATH: str = "./chroma_db"  # USE: Local on-disk path for ChromaDB in development
+    CHROMA_HOST: str | None = None      # USE: ChromaDB server host, set in production to use AsyncHttpClient
+    CHROMA_PORT: int = 8000             # USE: ChromaDB server port, used only when CHROMA_HOST is set
 
     # FLOW-2: Config class to load from .env file directly.
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=True)
