@@ -79,9 +79,39 @@ mock_state_info.values = {
     "topic": "technology"
 }
 
+
+async def mock_astream(*args, **kwargs):
+    """ Synthetic resumed-graph stream used by /approve endpoint tests. """
+    yield {"human_approval": {"status": "researching", "human_approved": True}}
+    yield {"research": {"research_output": "Mocked research findings.", "status": "summarizing"}}
+    yield {
+        "summary": {
+            "final_report": {
+                "title": "Test Report",
+                "summary": "Summary",
+                "sections": [
+                    {
+                        "heading": "Introduction",
+                        "content": "This is the content for the introduction section of the test report containing more than fifty characters to pass validation checks.",
+                        "citations": []
+                    }
+                ],
+                "topic": "technology",
+                "confidence_score": 0.9,
+                "total_sources": 0
+            },
+            "citations": [],
+            "status": "citing"
+        }
+    }
+    yield {"citation_check": {"verified_citations": [], "failed_citations": []}}
+
+
 mock_graph = MagicMock()
 mock_graph.astream_events = mock_astream_events
+mock_graph.astream = mock_astream
 mock_graph.aget_state = AsyncMock(return_value=mock_state_info)
+mock_graph.aupdate_state = AsyncMock()
 
 # Patch setup_checkpointer and build_graph before any imports of app
 from unittest.mock import patch
@@ -100,6 +130,15 @@ from app.models.report import StructuredReport, ReportSection
 # Manually register mocks on app.state to guarantee availability during tests
 app.state.checkpointer = MagicMock()
 app.state.graph = mock_graph
+
+# Stop the patches now that app.state.graph/checkpointer are pinned to the mocks above.
+# ASGITransport never triggers FastAPI's lifespan during tests, so these patches only
+# ever existed to protect that import-time app construction — leaving them active would
+# make app.graph.main_graph.build_graph / app.graph.checkpointer.setup_checkpointer
+# resolve to mocks for every test, including ones (like test_graph.py) that import and
+# call the real functions directly to build a genuine graph with a MemorySaver.
+patch_checkpointer.stop()
+patch_graph.stop()
 # ================== IMPORTS ==================
 
 
@@ -179,8 +218,19 @@ def mock_openai():
     mock_instance.ainvoke = AsyncMock(
         return_value={"messages": [AIMessage(content="Mocked research findings content.")]}
     )                                           # USE: Bind mock message response
-    
-    yield mock_openai_class
+
+    # FLOW-5: Stub create_react_agent itself, so BaseAgent subclasses (Research/Science/
+    # Technology agents) get a working .agent.ainvoke() without needing to mock LangGraph's
+    # internal ReAct tool-calling loop (model.bind_tools(tools).ainvoke(...) is a separate,
+    # unconfigured mock chain that plain mock_instance.ainvoke above does not reach).
+    with patch("app.agents.base_agent.create_react_agent") as mock_create_react_agent:
+        mock_react_agent = MagicMock()
+        mock_react_agent.ainvoke = AsyncMock(
+            return_value={"messages": [AIMessage(content="Mocked research findings content.")]}
+        )                                       # USE: Stand-in compiled react agent with a working ainvoke
+        mock_create_react_agent.return_value = mock_react_agent
+
+        yield mock_openai_class
 # =========== FUNCTION ===========
 
 
